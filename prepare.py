@@ -54,7 +54,7 @@ def split_IMA(root='icxe15wwq', PATH='../RAW/'):
         flt[0].header['EXPTIME'] = exptime
         flt['SCI'].data = sci[5:-5,5:-5]/exptime
         flt['ERR'].data = err[5:-5,5:-5]
-        flt['DQ'].data = dq[j][5:-5,5:-5]
+        #flt['DQ'].data = dq[j][5:-5,5:-5]
         flt['SAMP'].data = np.zeros((1014,1014)) + 1.
         flt['TIME'].data = np.zeros((1014,1014)) + exptime
         flt[0].header['IMA2FLT'] = (1, 'FLT {} extracted from IMA file'.format(j))
@@ -174,9 +174,9 @@ def align_reads(root='icxe15wwq', threshold=3, final_scale=0.06, refimage='../RE
         se.aXeParams()
         se.copyConvFile()
         se.options['CHECKIMAGE_TYPE'] = 'NONE'
-        se.options['FILTER']    = 'Y'
+        se.options['FILTER']    = 'N'
         se.options['WEIGHT_IMAGE'] = '{}_flt.fits[1]'.format(exp)
-        se.options['WEIGHT_TYPE'] = 'NONE'
+        se.options['WEIGHT_TYPE'] = 'MAP_WEIGHT'
         
         #
         se.params['X_IMAGE'] = True; se.params['Y_IMAGE'] = True
@@ -197,13 +197,14 @@ def align_reads(root='icxe15wwq', threshold=3, final_scale=0.06, refimage='../RE
         
     #### Make room for TWEAK wcsname
     for exp in asn.exposures:
-        threedhst.prep_flt_astrodrizzle.clean_wcsname(flt='{}_flt.fits'.format(exp), wcsname='TWEAK')    
+        threedhst.prep_flt_astrodrizzle.clean_wcsname(flt='{}_flt.fits'.format(exp), wcsname='TWEAK') 
+        threedhst.prep_flt_astrodrizzle.clean_wcsname(flt='{}_flt.fits'.format(exp), wcsname='OPUS')    
         
-    tweakreg.TweakReg('{}_asn.fits'.format(root), refimage=refimage, updatehdr=True, updatewcs=True, catfile=catfile, xcol=2, ycol=3, xyunits='pixels', refcat=master_catalog, refxcol = 5, refycol = 6, refxyunits='degrees', shiftfile=True, fitgeometry='shift',outshifts='{}_shifts.txt'.format(root), outwcs='{}_wcs.fits'.format(root), searchrad=100., tolerance=1., minobj = 5, xoffset = 0.0, yoffset = 0.0, wcsname='TWEAK', interactive=True, residplot='No plot', see2dplot=True, clean=True, headerlet=False, clobber=True)
+    tweakreg.TweakReg('{}_asn.fits'.format(root), refimage=refimage, updatehdr=True, updatewcs=True, catfile=catfile, xcol=2, ycol=3, xyunits='pixels', refcat=master_catalog, refxcol = 5, refycol = 6, refxyunits='degrees', shiftfile=True, fitgeometry='shift',outshifts='{}_shifts.txt'.format(root), outwcs='{}_wcs.fits'.format(root), searchrad=5., tolerance=1., minobj = 5, xoffset = 0.0, yoffset = 0.0, wcsname='TWEAK', interactive=False, residplot='No plot', see2dplot=True, clean=True, headerlet=False, clobber=True)
     
     drizzlepac.astrodrizzle.AstroDrizzle('{}_asn.fits'.format(root), output=root, clean=True, final_scale=final_scale, 
         final_pixfrac=0.8, context=False, resetbits=4096, final_bits=576, driz_sep_bits=576, 
-        preserve=False, driz_cr_snr='8.0 5.0', driz_cr_scale = '2.5 0.7', wcskey = 'TWEAK')
+        preserve=False, driz_cr_snr='8.0 5.0', driz_cr_scale = '2.5 0.7', wcskey='TWEAK')
         
     
 def prep_FLTs(root='icxe15010', refimage='../REF/cosmos-wide_ACS.fits', REF_CAT='../REF/IPAC_ACS.fits'):
@@ -223,7 +224,7 @@ def prep_FLTs(root='icxe15010', refimage='../REF/cosmos-wide_ACS.fits', REF_CAT=
         use2dhist = True, see2dplot = False, separation = 0.5, tolerance = 1.0, xoffset = 0.0, yoffset = 0.0, 
         fitgeometry = 'shift', residplot = 'No plot', interactive=False, nclip = 3, sigma = 3.0, clobber=True) 
     
-    drizzlepac.astrodrizzle.AstroDrizzle(root+'_asn.fits', clean=True, final_scale=None, final_pixfrac=1.0, context=False, final_bits=576, preserve=False, driz_cr_snr='5.0 4.0', driz_cr_scale = '2.5 0.7', wcskey= 'TWEAK', clobber=True)
+    drizzlepac.astrodrizzle.AstroDrizzle(root+'_asn.fits', clean=True, final_pixfrac=1.0, context=False, final_bits=576, preserve=False, driz_cr_snr='5.0 4.0', driz_cr_scale = '2.5 0.7', wcskey= 'TWEAK')
     
 def run_orbit(master_root='icxe15010', RAW_PATH = '../RAW/'):
     
@@ -240,8 +241,10 @@ def run_orbit(master_root='icxe15010', RAW_PATH = '../RAW/'):
         make_pointing_asn(root=root, master_root=master_root)
         subtract_background_reads(root=root, master_root=master_root)
         align_reads(root=root)
-
     
-    files = glob.glob(master_root[:7]+'*_*_flt.fits')
-    drizzlepac.astrodrizzle.AstroDrizzle(files, output=master_root, clean=False, final_scale=0.06, final_pixfrac=0.8, context=False, final_bits=576, preserve=False, wcskey = 'TWEAK', driz_combine=True, final_refimage='../REF/cosmos-wide_ACS.fits', final_wcs=True)
+    files = glob.glob(master_root[:6]+'*_*_flt.fits')
+    drizzlepac.astrodrizzle.AstroDrizzle(files, output='test1', clean=True, final_scale=0.06, final_pixfrac=0.8, context=False, preserve=False, skysub=False, wcskey = 'TWEAK', driz_separate = False, driz_sep_wcs = False, median = False, blot = False, driz_cr = False, driz_combine = True, final_wht_type = 'IVM', final_kernel = 'square', final_wt_scl = 'exptime', final_fillval = None,final_bits = 576, final_units = 'cps', final_wcs = True, driz_sep_bits = 0, final_rot=0, final_ra=1.501375000000E+02, final_dec=2.597027777778E+00)#, final_outnx=9100, final_outny=10200)
+    
+    
+    
     
