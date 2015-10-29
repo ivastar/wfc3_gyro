@@ -17,7 +17,8 @@ def split_IMA(root='icxe15wwq', PATH='../RAW/'):
     Make FLTs from the individual reads.
     """
     
-    FLAT_F140W = 1 ### FLATCORR=COMPLETE for all of these
+    FLAT_F160W = fits.open(os.path.join(os.getenv('iref'),'uc721145i_pfl.fits'))[1].data
+    BP_MASK = fits.open('../REF/new_bp_Oct17.fits')[0].data
     
     ima = fits.open(PATH+root+'_ima.fits.gz')
     flt = fits.open(root+'_flt.fits')
@@ -30,7 +31,7 @@ def split_IMA(root='icxe15wwq', PATH='../RAW/'):
         
     time = np.zeros(NSAMP)
     for i in range(NSAMP):
-        cube[NSAMP-1-i, :, :] = ima['SCI',i+1].data*ima['TIME',i+1].header['PIXVALUE']/FLAT_F140W
+        cube[NSAMP-1-i, :, :] = ima['SCI',i+1].data*ima['TIME',i+1].header['PIXVALUE']
         dq[NSAMP-1-i, :, :] = ima['DQ',i+1].data
         time[NSAMP-1-i] = ima['TIME',i+1].header['PIXVALUE']
     
@@ -48,13 +49,14 @@ def split_IMA(root='icxe15wwq', PATH='../RAW/'):
         print '{}_{:02d}_flt.fits'.format(root,j)
         sci = diff[j,:,:]
         exptime = dt[j]
-        var = readnoise_2D + sci        
+        var = readnoise_2D + sci*FLAT_F160W    
         err = np.sqrt(var)/exptime
         
         flt[0].header['EXPTIME'] = exptime
         flt['SCI'].data = sci[5:-5,5:-5]/exptime
         flt['ERR'].data = err[5:-5,5:-5]
         #flt['DQ'].data = dq[j][5:-5,5:-5]
+        flt['DQ'].data[BP_MASK == 1] += 4
         flt['SAMP'].data = np.zeros((1014,1014)) + 1.
         flt['TIME'].data = np.zeros((1014,1014)) + exptime
         flt[0].header['IMA2FLT'] = (1, 'FLT {} extracted from IMA file'.format(j))
@@ -91,7 +93,7 @@ def make_pointing_asn(root='icxe15wwq', master_root='icxe15010'):
     out_fits.writeto('{}_asn.fits'.format(root), clobber=True)
 
 
-def subtract_background_reads(root='icxe15wwq', master_root='icxe15010'):
+def subtract_background_reads(root='icxe15wwq', master_root='icxe15010', subtract=False):
     
     import threedhst
     import stwcs
@@ -108,17 +110,8 @@ def subtract_background_reads(root='icxe15wwq', master_root='icxe15010'):
     seg_data = np.cast[np.float32](seg[0].data)
           
     yi, xi = np.indices((1014,1014))
-    NCOMP=6
-    bg_components = np.ones((NCOMP,1014,1014))
-    bg_components[1,:,:] = (xi-507)/507.
-    bg_components[2,:,:] = (yi-507)/507.
-    bg_components[3,:,:] = ((xi-507)/507.)**2
-    bg_components[4,:,:] = ((yi-507)/507.)**2
-    bg_components[5,:,:] = (xi-507)*(yi-507)/507.**2
-            
-    bg_flat = bg_components.reshape((NCOMP,1014**2))            
-
-    #### Loop through FLTs, blotting reference and segmentation
+     
+    #### Loop through FLTs
     models = []
     for exp in asn.exposures:
         flt = fits.open('{}_flt.fits'.format(exp)) #, mode='update')
@@ -135,32 +128,23 @@ def subtract_background_reads(root='icxe15wwq', master_root='icxe15010'):
         data_range = np.percentile(flt[2].data[mask], [0.5, 99.5])
         mask &= (flt[2].data >= data_range[0]) & (flt[2].data <= data_range[1])
         
-        ### Least-sq fit for component normalizations
-        data = flt[1].data[mask].flatten()
-        wht = (1./flt[2].data[mask].flatten())**2
-        templates = bg_flat[:, mask.flatten()]
-        p0 = np.zeros(NCOMP)
-        p0[0] = np.median(data)
-        obj_fun = threedhst.grism_sky.obj_lstsq
-        popt = scipy.optimize.leastsq(obj_fun, p0, args=(data, templates, wht), full_output=True, ftol=1.49e-8/1000., xtol=1.49e-8/1000.)
-        xcoeff = popt[0]
-        model = np.dot(xcoeff, bg_flat).reshape((1014,1014))
-        models.append(model)
+        sky_level = np.median(flt[1].data[mask])
+        model = flt[1].data*0. + sky_level
         
         # add header keywords of the fit components
         flt = fits.open('{}_flt.fits'.format(exp), mode='update')
-        flt[1].data -= model
-        for i in range(NCOMP):
-            if 'BGCOMP%d' %(i+1) in flt[0].header:
-                flt[0].header['BGCOMP%d' %(i+1)] += xcoeff[i]
-            else:
-                flt[0].header['BGCOMP%d' %(i+1)] = xcoeff[i]                
+        flt[1].header['MDRIZSKY'] =  sky_level 
+        if subtract:
+            flt[1].data -= model           
+            flt[1].header['BG_SUB'] =  'Yes'
+        else:
+            flt[1].header['BG_SUB'] =  'No'
         
         flt.flush()
-        coeff_str = '  '.join(['%.4f' %c for c in xcoeff])
-        print 'Background subtraction, {}_flt.fits:\n\n  {}'.format(exp, coeff_str)
+        print 'Background subtraction, {}_flt.fits:  {}'.format(exp, sky_level)
+        
 
-def align_reads(root='icxe15wwq', threshold=3, final_scale=0.06, refimage='../REF/cosmos-wide_ACS.fits', master_catalog='../REF/IPAC_ACS.fits'):
+def align_reads(root='icxe15wwq', threshold=3, final_scale=0.12, refimage='../REF/cosmos-wide_ACS.fits', master_catalog='../REF/IPAC_ACS.fits', align=True):
     
     from drizzlepac import tweakreg
 
@@ -170,6 +154,13 @@ def align_reads(root='icxe15wwq', threshold=3, final_scale=0.06, refimage='../RE
     fp = open(catfile,'w')
 
     for exp in asn.exposures:
+        
+        flt = fits.open('{}_flt.fits'.format(exp), mode='update')
+        if flt[1].header['BG_SUB'] == 'No':
+            flt[1].data -= flt[1].header['MDRIZSKY']
+            flt[1].header['BG_SUB'] =  'Yes'
+            flt.flush()
+        
         se = threedhst.sex.SExtractor()
         se.aXeParams()
         se.copyConvFile()
@@ -195,17 +186,24 @@ def align_reads(root='icxe15wwq', threshold=3, final_scale=0.06, refimage='../RE
         
     fp.close()
         
-    #### Make room for TWEAK wcsname
-    for exp in asn.exposures:
-        threedhst.prep_flt_astrodrizzle.clean_wcsname(flt='{}_flt.fits'.format(exp), wcsname='TWEAK') 
-        threedhst.prep_flt_astrodrizzle.clean_wcsname(flt='{}_flt.fits'.format(exp), wcsname='OPUS')    
+    if align:
+        #### Make room for TWEAK wcsname
+        for exp in asn.exposures:
+            threedhst.prep_flt_astrodrizzle.clean_wcsname(flt='{}_flt.fits'.format(exp), wcsname='TWEAK') 
+            threedhst.prep_flt_astrodrizzle.clean_wcsname(flt='{}_flt.fits'.format(exp), wcsname='OPUS')    
         
-    tweakreg.TweakReg('{}_asn.fits'.format(root), refimage=refimage, updatehdr=True, updatewcs=True, catfile=catfile, xcol=2, ycol=3, xyunits='pixels', refcat=master_catalog, refxcol = 5, refycol = 6, refxyunits='degrees', shiftfile=True, fitgeometry='shift',outshifts='{}_shifts.txt'.format(root), outwcs='{}_wcs.fits'.format(root), searchrad=5., tolerance=1., minobj = 5, xoffset = 0.0, yoffset = 0.0, wcsname='TWEAK', interactive=False, residplot='No plot', see2dplot=True, clean=True, headerlet=False, clobber=True)
+        tweakreg.TweakReg('{}_asn.fits'.format(root), refimage=refimage, updatehdr=True, updatewcs=True, catfile=catfile, xcol=2, ycol=3, xyunits='pixels', refcat=master_catalog, refxcol = 5, refycol = 6, refxyunits='degrees', shiftfile=True, fitgeometry='shift',outshifts='{}_shifts.txt'.format(root), outwcs='{}_wcs.fits'.format(root), searchrad=5., tolerance=1., minobj = 5, xoffset = 0.0, yoffset = 0.0, wcsname='TWEAK', interactive=False, residplot='No plot', see2dplot=True, clean=True, headerlet=False, clobber=True)
     
     drizzlepac.astrodrizzle.AstroDrizzle('{}_asn.fits'.format(root), output=root, clean=True, final_scale=final_scale, 
-        final_pixfrac=0.8, context=False, resetbits=4096, final_bits=576, driz_sep_bits=576, 
+        final_pixfrac=0.8, context=False, resetbits=0, final_bits=576, driz_sep_bits=576, 
         preserve=False, driz_cr_snr='8.0 5.0', driz_cr_scale = '2.5 0.7', wcskey='TWEAK')
         
+    for exp in asn.exposures:
+        flt = fits.open('{}_flt.fits'.format(exp), mode='update')
+        flt[1].data += flt[1].header['MDRIZSKY']
+        flt[1].header['BG_SUB'] =  'No'
+        flt.flush()
+    
     
 def prep_FLTs(root='icxe15010', refimage='../REF/cosmos-wide_ACS.fits', REF_CAT='../REF/IPAC_ACS.fits'):
     
@@ -224,7 +222,19 @@ def prep_FLTs(root='icxe15010', refimage='../REF/cosmos-wide_ACS.fits', REF_CAT=
         use2dhist = True, see2dplot = False, separation = 0.5, tolerance = 1.0, xoffset = 0.0, yoffset = 0.0, 
         fitgeometry = 'shift', residplot = 'No plot', interactive=False, nclip = 3, sigma = 3.0, clobber=True) 
     
-    drizzlepac.astrodrizzle.AstroDrizzle(root+'_asn.fits', clean=True, final_pixfrac=1.0, context=False, final_bits=576, preserve=False, driz_cr_snr='5.0 4.0', driz_cr_scale = '2.5 0.7', wcskey= 'TWEAK')
+    drizzlepac.astrodrizzle.AstroDrizzle(root+'_asn.fits', clean=False, final_pixfrac=1.0, context=False, final_bits=576, resetbits=0, preserve=False, driz_cr_snr='5.0 4.0', driz_cr_scale = '2.5 0.7', wcskey= 'TWEAK')
+    
+def run_sextractor(mosaic='test1_drz_sci.fits', weight='test1_drz_wht.fits'):
+    
+    import os
+    
+    catalog = mosaic.replace('.fits','.cat')
+    segmentaion = mosaic.replace('.fits','_seg.fits')
+    
+    sextr = "sex %s -c gyro.config -CATALOG_NAME %s -MAG_ZEROPOINT %f -BACK_TYPE AUTO,AUTO -WEIGHT_TYPE MAP_WEIGHT -WEIGHT_GAIN Y,Y -WEIGHT_IMAGE %s -GAIN_KEY EXPTIME*CCDGAIN -CHECKIMAGE_NAME %s,%s,%s" %(mosaic, catalog, 25.956, weight, mosaic.replace('.fits','_seg.fits'), mosaic.replace('.fits','_bg.fits'), mosaic.replace('.fits','_sub.fits'))
+
+    os.system(sextr)
+    
     
 def run_orbit(master_root='icxe15010', RAW_PATH = '../RAW/'):
     
@@ -240,11 +250,13 @@ def run_orbit(master_root='icxe15010', RAW_PATH = '../RAW/'):
         split_IMA(root=root)
         make_pointing_asn(root=root, master_root=master_root)
         subtract_background_reads(root=root, master_root=master_root)
+        
+    align_reads(root=asn.exposures[0], align=False)
+    for root in asn.exposures[1:]:
         align_reads(root=root)
     
-    files = glob.glob(master_root[:6]+'*_*_flt.fits')
-    drizzlepac.astrodrizzle.AstroDrizzle(files, output='test1', clean=True, final_scale=0.06, final_pixfrac=0.8, context=False, preserve=False, skysub=False, wcskey = 'TWEAK', driz_separate = False, driz_sep_wcs = False, median = False, blot = False, driz_cr = False, driz_combine = True, final_wht_type = 'IVM', final_kernel = 'square', final_wt_scl = 'exptime', final_fillval = None,final_bits = 576, final_units = 'cps', final_wcs = True, driz_sep_bits = 0, final_rot=0, final_ra=1.501375000000E+02, final_dec=2.597027777778E+00)#, final_outnx=9100, final_outny=10200)
-    
+    #files = glob.glob(master_root[:6]+'*_*_flt.fits')
+    #drizzlepac.astrodrizzle.AstroDrizzle(files, output='test2', clean=True, final_scale=0.1, final_pixfrac=0.8, resetbits=0, context=False, preserve=False, skysub = True, skywidth = 0., skystat = '', skylower = None, skyupper = None, skyclip = 0, skylsigma = 0.0, skyusigma = 0.0, skyuser = 'MDRIZSKY', skyfile = '', wcskey = 'TWEAK', driz_separate = False, driz_sep_wcs = False, median = False, blot = False, driz_cr = False, driz_combine = True, final_wht_type = 'IVM', final_kernel = 'square', final_wt_scl = 'exptime', final_fillval = None,final_bits = 576, final_units = 'cps', final_wcs = True, driz_sep_bits = 576, final_rot=0, final_ra=1.501375000000E+02, final_dec=2.597027777778E+00,driz_cr_snr='8.0 5.0', driz_cr_scale = '2.5 0.7', final_outnx=9100, final_outny=10200)
     
     
     
