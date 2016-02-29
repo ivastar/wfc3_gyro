@@ -66,88 +66,137 @@ def sigma_table():
     import scipy
     import scipy.optimize
     
-    all_asn = glob.glob('*asn.fits')
+    all_asn = glob.glob('*0_asn.fits')
     
     ### open file: filename, sigma_flt, sigma_drz, exptime
     fp = open('sigma_table.txt','w')
-    fp.write('#exp sigma_flt sigma_flt3 sigma_flt5 sigma_drz sigma_drz3 sigma_drz5 exptime bg flag\n')
+    fp.write('#exp sigma_flt sigma_flt2 sigma_flt3 sigma_flt5 sigma_drz sigma_drz2 sigma_drz3 sigma_drz5 exptime bg flag\n')
+    
+    yi, xi = np.indices((1014,1014))
+    yi2, xi2 = np.indices((507,507))
+    yi3, xi3 = np.indices((338,338))
+    yi5, xi5 = np.indices((202,202))
+            
+    fp3 = np.array([[1,1,1],[1,1,1],[1,1,1]], dtype=int)
+    fp5 = np.ones([5,5], dtype=int)
     
     for asn_file in all_asn:
-        
-        if asn_file.endswith('0_asn.fits'):
-            
-            root = asn_file.split('_asn')[0]
-            asn = threedhst.utils.ASNFile('{}'.format(asn_file))
+               
+        root = asn_file.split('_asn')[0]
+        asn = threedhst.utils.ASNFile('{}'.format(asn_file))
 
-            ref = fits.open('{}_drz_sci.fits'.format(root))
-            ref_wcs = stwcs.wcsutil.HSTWCS(ref, ext=0)
+        ref = fits.open('{}_drz_sci.fits'.format(root))
+        ref_wcs = stwcs.wcsutil.HSTWCS(ref, ext=0)
 
-            seg = fits.open('{}_drz_seg.fits'.format(root))    
-            seg_data = np.cast[np.float32](seg[0].data)
-          
-            yi, xi = np.indices((1014,1014))
-            
-            fp3 = np.array([[1,1,1],[1,1,1],[1,1,1]], dtype=int)
-            fp5 = np.ones([5,5], dtype=int)
-            
-            for exp in asn.exposures:
+        seg = fits.open('{}_drz_seg.fits'.format(root))    
+        seg_data = np.cast[np.float32](seg[0].data)
+                      
+        for exp in asn.exposures:
                 
-                flt = fits.open('{}_flt.fits'.format(exp))
-                flt_wcs = stwcs.wcsutil.HSTWCS(flt, ext=1)
+            flt = fits.open('{}_flt.fits'.format(exp))
+            flt_wcs = stwcs.wcsutil.HSTWCS(flt, ext=1)
                 
-                ### Original FLT
-                blotted_seg = astrodrizzle.ablot.do_blot(seg_data, ref_wcs, flt_wcs, 1, coeffs=True, 
-                    interp='nearest', sinscl=1.0, stepsize=10, wcsmap=None) 
-                mask = (blotted_seg == 0) & (flt['DQ'].data == 0) & (xi > 10) & (yi > 10) & (xi < 1004) & (yi < 1004)   
-                n, bin_edge  = np.histogram(flt[1].data[mask], bins=300, range=[-1,1], normed=True)
-                centers = (bin_edge[:-1] + (bin_edge[1:] - bin_edge[:-1])/2)
-                flt_coeff, flt_var = scipy.optimize.curve_fit(gauss, centers, n, p0=[np.max(n),0.,1.])
+            ### Original FLT
+            blotted_seg = astrodrizzle.ablot.do_blot(seg_data, ref_wcs, flt_wcs, 1, coeffs=True, 
+                interp='nearest', sinscl=1.0, stepsize=10, wcsmap=None) 
+            mask = (blotted_seg == 0) & (flt['DQ'].data == 0) & (xi > 10) & (yi > 10) & (xi < 1004) & (yi < 1004)   
+            n, bin_edge  = np.histogram(flt[1].data[mask], bins=300, range=[-1,1], normed=True)
+            centers = (bin_edge[:-1] + (bin_edge[1:] - bin_edge[:-1])/2)
+            flt_coeff, flt_var = scipy.optimize.curve_fit(gauss, centers, n, p0=[np.max(n),0.,1.])
                 
-                ### Smooth by 3
-                #flt3 = scipy.ndimage.median_filter(flt[1].data, size=3, mode='nearest')
-                flt3 = scipy.ndimage.filters.generic_filter(flt[1].data, function=np.mean, footprint=fp3)
-                n, bin_edge  = np.histogram(flt3[mask], bins=300, range=[-1,1], normed=True)
-                centers = (bin_edge[:-1] + (bin_edge[1:] - bin_edge[:-1])/2)
-                flt_coeff3, flt_var3 = scipy.optimize.curve_fit(gauss, centers, n, p0=[np.max(n),0.,1.])
+            ### Smooth by 2
+            flt2 = bin_ndarray(flt[1].data, new_shape=(507,507),operation='mean')
+            dq2 = bin_ndarray(flt[3].data, new_shape=(507,507),operation='sum')
+            seg_bin = bin_ndarray(blotted_seg, new_shape=(507,507),operation='sum')
+            mask = (seg_bin == 0) & (dq2 == 0) & (xi2 > 5) & (yi2 > 5) & (xi2 < 502) & (yi2 < 502)
+            n, bin_edge  = np.histogram(flt2[mask], bins=300, range=[-1,1], normed=True)
+            centers = (bin_edge[:-1] + (bin_edge[1:] - bin_edge[:-1])/2)
+            flt_coeff2, flt_var2 = scipy.optimize.curve_fit(gauss, centers, n, p0=[np.max(n),0.,1.])
+
+
+            ### Smooth by 3
+            # this takes too long
+            #flt3 = scipy.ndimage.median_filter(flt[1].data, size=3, mode='nearest')
+            # the generic filter worked well
+            #flt3 = scipy.ndimage.filters.generic_filter(flt[1].data, function=np.mean, footprint=fp3)
+            flt3 = bin_ndarray(flt[1].data, new_shape=(338,338),operation='mean')
+            dq3 = bin_ndarray(flt[3].data, new_shape=(338,338),operation='sum')
+            seg_bin = bin_ndarray(blotted_seg, new_shape=(338,338),operation='sum')
+            mask = (seg_bin == 0) & (dq3 == 0) & (xi3 > 3) & (yi3 > 3) & (xi3 < 335) & (yi3 < 335)
+            n, bin_edge  = np.histogram(flt3[mask], bins=300, range=[-1,1], normed=True)
+            centers = (bin_edge[:-1] + (bin_edge[1:] - bin_edge[:-1])/2)
+            flt_coeff3, flt_var3 = scipy.optimize.curve_fit(gauss, centers, n, p0=[np.max(n),0.,1.])
                 
 
-                ### Smooth by 5
-                #flt5 = scipy.ndimage.median_filter(flt[1].data, size=5, mode='nearest')
-                flt5 = scipy.ndimage.filters.generic_filter(flt[1].data, function=np.mean, footprint=fp5)
-                n, bin_edge  = np.histogram(flt5[mask], bins=300, range=[-1,1], normed=True)
-                centers = (bin_edge[:-1] + (bin_edge[1:] - bin_edge[:-1])/2)
-                flt_coeff5, flt_var5 = scipy.optimize.curve_fit(gauss, centers, n, p0=[np.max(n),0.,1.])
+            ### Smooth by 5
+            #flt5 = scipy.ndimage.median_filter(flt[1].data, size=5, mode='nearest')
+            #flt5 = scipy.ndimage.filters.generic_filter(flt[1].data, function=np.mean, footprint=fp5)
+            flt5 = bin_ndarray(flt[1].data[:-4,:-4], new_shape=(202,202),operation='mean')
+            dq5 = bin_ndarray(flt[3].data[:-4,:-4], new_shape=(202,202),operation='sum')
+            seg_bin = bin_ndarray(blotted_seg[:-4,:-4], new_shape=(202,202),operation='sum')
+            mask = (seg_bin == 0) & (dq5 == 0) & (xi5 > 2) & (yi5 > 2) & (xi5 < 200) & (yi5 < 200)
+            n, bin_edge  = np.histogram(flt5[mask], bins=300, range=[-1,1], normed=True)
+            centers = (bin_edge[:-1] + (bin_edge[1:] - bin_edge[:-1])/2)
+            flt_coeff5, flt_var5 = scipy.optimize.curve_fit(gauss, centers, n, p0=[np.max(n),0.,1.])
                 
-                ### Original DRZ
-                drz = fits.open('{}_split_drz_sci.fits'.format(exp))
-                drz_wcs = stwcs.wcsutil.HSTWCS(drz, ext=0)
-                drz_sh = np.shape(drz[0].data)
-                dyi, dxi = np.indices(drz_sh)
-                blotted_seg = astrodrizzle.ablot.do_blot(seg_data, ref_wcs, drz_wcs, 1, coeffs=False, 
-                    interp='nearest', sinscl=1.0, stepsize=10, wcsmap=None)
-                mask = (blotted_seg == 0) & (dxi > 10) & (dyi > 10) & (dxi < drz_sh[1]-10) & (dyi < drz_sh[0]-10)
-                n, bin_edge = np.histogram(drz[0].data[mask], bins=300, range=[-1.,1.], normed=True)
-                centers = (bin_edge[:-1] + (bin_edge[1:] - bin_edge[:-1])/2)
-                drz_coeff, drz_var = scipy.optimize.curve_fit(gauss, centers, n, p0=[np.max(n),0.,1.])
+            ### Original DRZ
+            drz = fits.open('{}_split_drz_sci.fits'.format(exp))
+            drz_wcs = stwcs.wcsutil.HSTWCS(drz, ext=0)
+            drz_sh = np.shape(drz[0].data)
+            dyi, dxi = np.indices(drz_sh)
+            blotted_seg = astrodrizzle.ablot.do_blot(seg_data, ref_wcs, drz_wcs, 1, coeffs=False, 
+                interp='nearest', sinscl=1.0, stepsize=10, wcsmap=None)
+            mask = (blotted_seg == 0) & (dxi > 10) & (dyi > 10) & (dxi < drz_sh[1]-10) & (dyi < drz_sh[0]-10)
+            n, bin_edge = np.histogram(drz[0].data[mask], bins=300, range=[-1.,1.], normed=True)
+            centers = (bin_edge[:-1] + (bin_edge[1:] - bin_edge[:-1])/2)
+            drz_coeff, drz_var = scipy.optimize.curve_fit(gauss, centers, n, p0=[np.max(n),0.,1.])
                 
-                ### Smooth by 3
-                #drz3 = scipy.ndimage.median_filter(drz[0].data, size=3, mode='nearest')
-                drz3 = scipy.ndimage.filters.generic_filter(drz[0].data, function=np.mean, footprint=fp3)
-                n, bin_edge = np.histogram(drz3, bins=300, range=[-1.,1.], normed=True)
-                centers = (bin_edge[:-1] + (bin_edge[1:] - bin_edge[:-1])/2)
-                drz_coeff3, drz_var3 = scipy.optimize.curve_fit(gauss, centers, n, p0=[np.max(n),0.,1.])
+            ### Smooth by 2
+            nn = 2
+            off = [drz_sh[0] % nn, drz_sh[1] % nn]
+            new_sh = [(drz_sh[0]-off[0])/nn, (drz_sh[1]-off[1])/nn]
+            dyi, dxi = np.indices(new_sh)
+            drz2 = bin_ndarray(drz[0].data[off[0]:, off[1]:], new_shape=(new_sh),operation='mean')
+            seg_bin = bin_ndarray(blotted_seg[off[0]:, off[1]:], new_shape=(new_sh), operation = 'sum')
+            mask = (seg_bin == 0) & (dyi > 5) & (dxi > 5) & (dyi < new_sh[0] - 5) & (dyi < new_sh[1]-5)
+            n, bin_edge = np.histogram(drz2[mask], bins=300, range=[-1.,1.], normed=True)
+            centers = (bin_edge[:-1] + (bin_edge[1:] - bin_edge[:-1])/2)
+            drz_coeff2, drz_var2 = scipy.optimize.curve_fit(gauss, centers, n, p0=[np.max(n),0.,1.])
                 
-                ### Smooth by 5
-                #drz5 = scipy.ndimage.median_filter(drz[0].data, size=5, mode='nearest')
-                drz5 = scipy.ndimage.filters.generic_filter(drz[0].data, function=np.mean, footprint=fp5)
-                n, bin_edge = np.histogram(drz5, bins=300, range=[-1.,1.], normed=True)
-                centers = (bin_edge[:-1] + (bin_edge[1:] - bin_edge[:-1])/2)
-                drz_coeff5, drz_var5 = scipy.optimize.curve_fit(gauss, centers, n, p0=[np.max(n),0.,1.])
+                
+            ### Smooth by 3
+            #drz3 = scipy.ndimage.median_filter(drz[0].data, size=3, mode='nearest')
+            #drz3 = scipy.ndimage.filters.generic_filter(drz[0].data, function=np.mean, footprint=fp3)
+            nn = 3
+            off = [drz_sh[0] % nn, drz_sh[1] % nn]
+            new_sh = [(drz_sh[0]-off[0])/nn, (drz_sh[1]-off[1])/nn]
+            dyi, dxi = np.indices(new_sh)
+            drz3 = bin_ndarray(drz[0].data[off[0]:, off[1]:], new_shape=(new_sh),operation='mean')
+            seg_bin = bin_ndarray(blotted_seg[off[0]:, off[1]:], new_shape=(new_sh), operation = 'sum')
+            mask = (seg_bin == 0) & (dyi > 3) & (dxi > 3) & (dyi < new_sh[0] - 3) & (dyi < new_sh[1]-3)
+            n, bin_edge = np.histogram(drz3[mask], bins=300, range=[-1.,1.], normed=True)
+            centers = (bin_edge[:-1] + (bin_edge[1:] - bin_edge[:-1])/2)
+            drz_coeff3, drz_var3 = scipy.optimize.curve_fit(gauss, centers, n, p0=[np.max(n),0.,1.])
+                
+            ### Smooth by 5
+            #drz5 = scipy.ndimage.median_filter(drz[0].data, size=5, mode='nearest')
+            #drz5 = scipy.ndimage.filters.generic_filter(drz[0].data, function=np.mean, footprint=fp5)
+            #drz3 = scipy.ndimage.filters.generic_filter(drz[0].data, function=np.mean, footprint=fp3)
+            nn = 5
+            off = [drz_sh[0] % nn, drz_sh[1] % nn]
+            new_sh = [(drz_sh[0]-off[0])/nn, (drz_sh[1]-off[1])/nn]
+            dyi, dxi = np.indices(new_sh)
+            drz5 = bin_ndarray(drz[0].data[off[0]:, off[1]:], new_shape=(new_sh),operation='mean')
+            seg_bin = bin_ndarray(blotted_seg[off[0]:, off[1]:], new_shape=(new_sh), operation = 'sum')
+            mask = (seg_bin == 0) & (dyi > 2) & (dxi > 2) & (dyi < new_sh[0] - 2) & (dyi < new_sh[1]-2)
+            n, bin_edge = np.histogram(drz5[mask], bins=300, range=[-1.,1.], normed=True)
+            centers = (bin_edge[:-1] + (bin_edge[1:] - bin_edge[:-1])/2)
+            drz_coeff5, drz_var5 = scipy.optimize.curve_fit(gauss, centers, n, p0=[np.max(n),0.,1.])
 
-                flag = 2
+            flag = 2
                 
-                print '{}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.2f}\t{:7.4f}\t{}\n'.format(exp, np.abs(flt_coeff[2]), np.abs(flt_coeff3[2]), np.abs(flt_coeff5[2]), np.abs(drz_coeff[2]), np.abs(drz_coeff3[2]), np.abs(drz_coeff5[2]), flt[1].header['SAMPTIME'], flt[0].header['BGCOMP1'],flag)
-                fp.write('{}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.2f}\t{:7.4f}\t{}\n'.format(exp, np.abs(flt_coeff[2]), np.abs(flt_coeff3[2]), np.abs(flt_coeff5[2]), np.abs(drz_coeff[2]), np.abs(drz_coeff3[2]), np.abs(drz_coeff5[2]), flt[1].header['SAMPTIME'], flt[0].header['BGCOMP1'],flag))
+            print '{}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.2f}\t{:7.4f}\t{}\n'.format(exp, np.abs(flt_coeff[2]), np.abs(flt_coeff2[2]), np.abs(flt_coeff3[2]), np.abs(flt_coeff5[2]), np.abs(drz_coeff[2]), np.abs(drz_coeff2[2]), np.abs(drz_coeff3[2]), np.abs(drz_coeff5[2]), flt[1].header['SAMPTIME'], flt[0].header['BGCOMP1'],flag)
+            fp.write('{}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.4f}\t{:7.2f}\t{:7.4f}\t{}\n'.format(exp, np.abs(flt_coeff[2]), np.abs(flt_coeff2[2]), np.abs(flt_coeff3[2]), np.abs(flt_coeff5[2]), np.abs(drz_coeff[2]), np.abs(drz_coeff2[2]), np.abs(drz_coeff3[2]), np.abs(drz_coeff5[2]), flt[1].header['SAMPTIME'], flt[0].header['BGCOMP1'],flag))
                 
     fp.close()    
             
@@ -158,65 +207,112 @@ def plot_sigma():
     import matplotlib.gridspec as gridspec
     import scipy
     
-    data = table.read('sigma_table.txt',format='ascii')
+    data = table.read('sigma_table_sum.txt',format='ascii')
     
-    fig = unicorn.catalogs.plot_init(xs=10,aspect=0.5, left=0.12, right=0.05, bottom=0.1, top=0.1, NO_GUI=False)
-    gs = gridspec.GridSpec(1,2,top=0.9, bottom=0.15)
-    xx = np.linspace(0., 0.2, 30.)
+    fig = unicorn.catalogs.plot_init(square=True, xs=8., aspect=1.0, 
+        fontsize=8, left=0.15, right=0.1, bottom=0.15, top=0.05)
+    gs = gridspec.GridSpec(2,2)
+    fig.subplots_adjust(wspace=0.20)
+    fig.subplots_adjust(hspace=0.20)
+    xx = np.linspace(0.00, 1.0, 30.)
+    fs = 10
 
     ax1 = fig.add_subplot(gs[0])
     ax2 = fig.add_subplot(gs[1])
+    ax3 = fig.add_subplot(gs[2])
+    ax4 = fig.add_subplot(gs[3])
     
     mask1 = (data['flag'] == 2 ) & (data['exptime'] < 260)
-    ax1.plot(data['sigma_flt'][mask1], data['sigma_drz'][mask1], 'o', color='0.5', alpha=0.5, label='252s')
-    coeff, var = scipy.optimize.curve_fit(fit_func, data['sigma_flt'][mask1], data['sigma_drz'][mask1], p0=[0.,0.5])
-    ff = fit_func(xx, *coeff)
-    ax1.plot(xx, ff, ':', color='0.5', alpha=0.5)
-    
-    ax2.plot(data['sigma_flt3'][mask1], data['sigma_drz3'][mask1], 'o', color='0.5', alpha=0.5, label='252s')
-    ax2.plot(data['sigma_flt5'][mask1], data['sigma_drz5'][mask1], 'o', color='0.5', alpha=0.5, label='252s')
+    ax1.plot(data['sigma_flt'][mask1], data['sigma_drz'][mask1], 'o', color='0.5',  alpha=0.5, label='252s', markersize=3)
+    #coeff, var = scipy.optimize.curve_fit(fit_func, data['sigma_flt'][mask1], data['sigma_drz'][mask1], p0=[0.,0.5])
+    #ff = fit_func(xx, *coeff)
+    #ax1.plot(xx, ff, ':', color='0.5', alpha=0.5)
+
+    ax2.plot(data['sigma_flt2'][mask1], data['sigma_drz2'][mask1], 'o', color='0.5', alpha=0.5, markersize=3)    
+    ax3.plot(data['sigma_flt3'][mask1], data['sigma_drz3'][mask1], 'o', color='0.5', alpha=0.5, markersize=3)
+    ax4.plot(data['sigma_flt5'][mask1], data['sigma_drz5'][mask1], 'o', color='0.5', alpha=0.5, markersize=3)
 
     mask2 = (data['flag'] == 2 ) & (data['exptime'] > 260)
-    ax1.plot(data['sigma_flt'][mask2], data['sigma_drz'][mask2], '^', color='0.5', alpha=0.5, label='277s')
-    coeff, var = scipy.optimize.curve_fit(fit_func, data['sigma_flt'][mask2], data['sigma_drz'][mask2], p0=[0.,0.5])
+    ax1.plot(data['sigma_flt'][mask2], data['sigma_drz'][mask2], 's', color='0.5', alpha=0.5, label='277s', markersize=3)
+
+    ax2.plot(data['sigma_flt2'][mask2], data['sigma_drz2'][mask2], 's', color='0.5', alpha=0.5, markersize=3)
+    ax3.plot(data['sigma_flt3'][mask2], data['sigma_drz3'][mask2], 's', color='0.5', alpha=0.5, markersize=3)
+    ax4.plot(data['sigma_flt5'][mask2], data['sigma_drz5'][mask2], 's', color='0.5', alpha=0.5, markersize=3)
+
+    mm = (data['flag'] == 2 )
+    coeff, var = scipy.optimize.curve_fit(fit_func, data['sigma_flt'][mm], data['sigma_drz'][mm], p0=[0.,0.5])
     ff = fit_func(xx, *coeff)
     ax1.plot(xx, ff, ':', color='0.5', alpha=0.5)
+    #coeff, var = scipy.optimize.curve_fit(fit_func, data['sigma_flt2'][mm], data['sigma_drz2'][mm], p0=[0.,0.5])
+    #ff = fit_func(xx, *coeff)
+    #ax2.plot(xx, ff, ':', color='0.5', alpha=0.5)
+    #coeff, var = scipy.optimize.curve_fit(fit_func, data['sigma_flt3'][mm], data['sigma_drz3'][mm], p0=[0.,0.5])
+    #ff = fit_func(xx, *coeff)
+    #ax3.plot(xx, ff, ':', color='0.5', alpha=0.5)
+    #coeff, var = scipy.optimize.curve_fit(fit_func, data['sigma_flt5'][mm], data['sigma_drz5'][mm], p0=[0.,0.5])
+    #ff = fit_func(xx, *coeff)
+    #ax4.plot(xx, ff, ':', color='0.5', alpha=0.5)
 
-    ax2.plot(data['sigma_flt3'][mask2], data['sigma_drz3'][mask2], '^', color='0.5', alpha=0.5, label='277s')
-    ax2.plot(data['sigma_flt5'][mask2], data['sigma_drz5'][mask2], '^', color='0.5', alpha=0.5, label='277s')
 
     mask3 = (data['flag'] == 0 )
-    ax1.plot(data['sigma_flt'][mask3], data['sigma_drz'][mask3], 'o', color='blue', alpha=0.5, label='COSMOS, 252s, guided')
-    ax2.plot(data['sigma_flt3'][mask3], data['sigma_drz3'][mask3], 'o', color='blue', alpha=0.5, label='COSMOS, 252s, guided')
-    ax2.plot(data['sigma_flt5'][mask3], data['sigma_drz5'][mask3], 'o', color='blue', alpha=0.5, label='COSMOS, 252s, guided')
+    ax1.plot(data['sigma_flt'][mask3], data['sigma_drz'][mask3], 'o', color='red', alpha=0.5, mfc='none',label='COSMOS, 252s, guided', markeredgecolor='red', markersize=5)
+    ax2.plot(data['sigma_flt2'][mask3], data['sigma_drz2'][mask3], 'o', color='red', alpha=0.5, mfc='none', markeredgecolor='red', markersize=5)
+    ax3.plot(data['sigma_flt3'][mask3], data['sigma_drz3'][mask3], 'o', color='red', alpha=0.5, mfc='none', markeredgecolor='red', markersize=5)
+    ax4.plot(data['sigma_flt5'][mask3], data['sigma_drz5'][mask3], 'o', color='red', alpha=0.5, mfc='none', markeredgecolor='red', markersize=5)
 
     mask4 = (data['flag'] == 1 ) & (data['exptime'] < 260)
-    ax1.plot(data['sigma_flt'][mask4], data['sigma_drz'][mask4], 'o', color='red', alpha=0.5, label='COSMOS, 252s')
-    ax2.plot(data['sigma_flt3'][mask4], data['sigma_drz3'][mask4], 'o', color='red', alpha=0.5, label='COSMOS, 252s')
-    ax2.plot(data['sigma_flt5'][mask4], data['sigma_drz5'][mask4], 'o', color='red', alpha=0.5, label='COSMOS, 252s')
+    ax1.plot(data['sigma_flt'][mask4], data['sigma_drz'][mask4], 'o', color='red', alpha=0.5, label='COSMOS, 252s', markersize=4)
+    ax2.plot(data['sigma_flt2'][mask4], data['sigma_drz2'][mask4], 'o', color='red', alpha=0.5, markersize=4)
+    ax3.plot(data['sigma_flt3'][mask4], data['sigma_drz3'][mask4], 'o', color='red', alpha=0.5, markersize=4)
+    ax4.plot(data['sigma_flt5'][mask4], data['sigma_drz5'][mask4], 'o', color='red', alpha=0.5, markersize=4)
 
     mask5 = (data['flag'] == 1 ) & (data['exptime'] > 260)
-    ax1.plot(data['sigma_flt'][mask5], data['sigma_drz'][mask5], '^', color='red', alpha=0.5, label='COSMOS, 277s')
-    ax2.plot(data['sigma_flt3'][mask5], data['sigma_drz3'][mask5], '^', color='red', alpha=0.5, label='COSMOS, 277s')
-    ax2.plot(data['sigma_flt5'][mask5], data['sigma_drz5'][mask5], '^', color='red', alpha=0.5, label='COSMOS, 277s')
+    ax1.plot(data['sigma_flt'][mask5], data['sigma_drz'][mask5], 's', color='red', alpha=0.5, label='COSMOS, 277s' , markersize=4)
+    ax2.plot(data['sigma_flt2'][mask5], data['sigma_drz2'][mask5], 's', color='red', alpha=0.5, markersize=4)
+    ax3.plot(data['sigma_flt3'][mask5], data['sigma_drz3'][mask5], 's', color='red', alpha=0.5, markersize=4)
+    ax4.plot(data['sigma_flt5'][mask5], data['sigma_drz5'][mask5], 's', color='red', alpha=0.5, markersize=4)
+    mm = (data['flag'] == 1 )
+    print 'Unbinned:\nGuided:{:6.4f}\nUnguided:{:6.4f} (min: {:6.4f} / max: {:6.4f})'.format(np.mean(data['sigma_drz'][mask3]), np.mean(data['sigma_drz'][mask4]), np.min(data['sigma_drz'][mask4]), np.max(data['sigma_drz'][mask4]))
+    print 'Binned 2x2:\nGuided:{:6.4f}\nUnguided:{:6.4f} (min: {:6.4f} / max: {:6.4f})'.format(np.mean(data['sigma_drz2'][mask3]), np.mean(data['sigma_drz2'][mask4]), np.min(data['sigma_drz2'][mask4]), np.max(data['sigma_drz2'][mask4]))
+    print 'Binned 3x3:\nGuided:{:6.4f}\nUnguided:{:6.4f} (min: {:6.4f} / max: {:6.4f})'.format(np.mean(data['sigma_drz3'][mask3]), np.mean(data['sigma_drz3'][mask4]), np.min(data['sigma_drz3'][mask4]), np.max(data['sigma_drz3'][mask4]))
+    print 'Binned 5x5:\nGuided:{:6.4f}\nUnguided:{:6.4f} (min: {:6.4f} / max: {:6.4f})'.format(np.mean(data['sigma_drz5'][mask3]), np.mean(data['sigma_drz5'][mask4]), np.min(data['sigma_drz5'][mask4]), np.max(data['sigma_drz5'][mask4]))
 
-    ax1.set_xlim([0.05,0.15])
-    ax1.set_ylim([0.05,0.15])
-    ax1.plot([0,0.2],[0.,0.2],'-', color='black',alpha=0.5)
-    ax1.set_xlabel('$\sigma_{FLT}$')
-    ax1.set_ylabel('$\sigma_{DRZ}$')
+    ax1.set_xlim([0.0,0.2])
+    ax1.set_ylim([0.0,0.2])
+
+    ax2.set_xlim([0.1,0.3])
+    ax2.set_ylim([0.1,0.3])
+
+    ax3.set_xlim([0.2,0.45])
+    ax3.set_ylim([0.2,0.45])
+
+    ax4.set_xlim([0.3,0.75])
+    ax4.set_ylim([0.3,0.75])
+    #ax4.xaxis.set_ticks(np.arange(0.0,0.04,0.01))
+    #ax4.yaxis.set_ticks(np.arange(0.0,0.04,0.01))
+
+    for ax in [ax1,ax2,ax3,ax4]:
+        ax.plot([0,0.8],[0.,0.8],'-', color='black',alpha=0.5)
+        #ax.plot([0,0.1,0.1], [0.1, 0.1,0],':', color='0.5', alpha=0.5)
+        #ax.plot([0,0.2,0.2], [0.2, 0.2,0],':', color='0.5', alpha=0.5)
+        #ax.plot([0,0.3,0.3], [0.3, 0.3,0],':', color='0.5', alpha=0.5)
+        #ax.plot([0,0.5,0.5], [0.5, 0.5,0],':', color='0.5', alpha=0.5)
+        ax.set_xlabel('$\sigma_{FLT}$', fontsize=fs)
+        ax.set_ylabel('$\sigma_{DRZ}$', fontsize=fs)
+        
     ax1.legend(loc=2, frameon=False, numpoints=1, fontsize=9)
-
-    ax2.set_xlim([0.0,0.06])
-    ax2.set_ylim([0.0,0.06])
-    ax2.plot([0,0.2],[0.,0.2],'-', color='black',alpha=0.5)
-    ax2.set_xlabel('$\sigma_{FLT}$')
-    ax2.set_ylabel('$\sigma_{DRZ}$')
-    ax2.text(0.04, 0.035, '3x3 median top hat')
-    ax2.text(0.03, 0.025, '5x5 median top hat')
+    ax1.set_title('Unbinned', fontsize=9)
+    #ax2.set_yticklabels([])
+    ax2.set_title('Sum Binned 2x2', fontsize=9)
+    #ax3.set_yticklabels([])
+    ax3.set_title('Sum Binned 3x3', fontsize=9)
+    #ax4.set_yticklabels([])
+    ax4.set_title('Sum Binned 5x5', fontsize=9)
 
     plt.show(block=False)
     
+    fig.savefig('sigma_bin.pdf', dpi=200, transparent=False)
+    fig.savefig('sigma_bin.png', dpi=200, transparent=False)
 
 
 def plot_flt_bg():
@@ -406,3 +502,39 @@ def fit_func(x, *p):
     
     A, B = p
     return A + x*B
+    
+def bin_ndarray(ndarray, new_shape, operation='sum'):
+    """
+    Bins an ndarray in all axes based on the target shape, by summing or
+        averaging.
+
+    Number of output dimensions must match number of input dimensions.
+
+    Example
+    -------
+    >>> m = np.arange(0,100,1).reshape((10,10))
+    >>> n = bin_ndarray(m, new_shape=(5,5), operation='sum')
+    >>> print(n)
+
+    [[ 22  30  38  46  54]
+     [102 110 118 126 134]
+     [182 190 198 206 214]
+     [262 270 278 286 294]
+     [342 350 358 366 374]]
+
+    """
+    if not operation.lower() in ['sum', 'mean', 'average', 'avg']:
+        raise ValueError("Operation not supported.")
+    if ndarray.ndim != len(new_shape):
+        raise ValueError("Shape mismatch: {} -> {}".format(ndarray.shape,
+                                                           new_shape))
+    compression_pairs = [(d, c//d) for d,c in zip(new_shape,
+                                                  ndarray.shape)]
+    flattened = [l for p in compression_pairs for l in p]
+    ndarray = ndarray.reshape(flattened)
+    for i in range(len(new_shape)):
+        if operation.lower() == "sum":
+            ndarray = ndarray.sum(-1*(i+1))
+        elif operation.lower() in ["mean", "average", "avg"]:
+            ndarray = ndarray.mean(-1*(i+1))
+    return ndarray

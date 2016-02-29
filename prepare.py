@@ -196,8 +196,10 @@ def fix_cosmic_rays(root='icxe15wwq', master_root = 'icxe15010'):
     yi, xi = np.indices((1014,1014))    
 
     # Build the object :
-    c = cosmics.cosmicsimage(flt_full[1].data*EXPTIME, gain=1.0, readnoise=2.2, 
-        sigclip = 5.0, sigfrac = 0.4, objlim = 5.0, satlevel=-1., pssl = SKY*EXPTIME)
+    #c = cosmics.cosmicsimage(flt_full[1].data*EXPTIME, gain=1.0, readnoise=2.2, 
+    #    sigclip = 5.0, sigfrac = 0.4, objlim = 5.0, satlevel=-1., pssl = SKY*EXPTIME)
+    c = cosmics.cosmicsimage(flt_full[1].data, gain=1.0, readnoise=0.12, 
+        sigclip = 4.0, sigfrac = 0.5, objlim = 10.0, satlevel=-1., pssl = 0.)
     
     # Run the full artillery :
     c.run(maxiter = 4, verbose=True)
@@ -330,8 +332,8 @@ def run_orbit(master_root='icxe15010', RAW_PATH = '../RAW/'):
         make_pointing_asn(root=root, master_root=master_root)
         subtract_background_reads(root=root, master_root=master_root)
         
-    align_reads(root=asn.exposures[0], align=False)
     fix_cosmic_rays(root=asn.exposures[0], master_root=master_root)
+    align_reads(root=asn.exposures[0], align=False)
     for root in asn.exposures[1:]:
         fix_cosmic_rays(root=root, master_root=master_root)
         align_reads(root=root)

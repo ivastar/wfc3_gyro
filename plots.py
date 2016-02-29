@@ -17,7 +17,7 @@ def mag_radius():
     
     gabe = table.read('../REF/cosmos-wide_v0.3_drz_bkg_sci.cat', format='ascii.sextractor')
     orig = table.read('/3DHST/Photometry/Release/v4.0/COSMOS/Detection/cosmos_3dhst.v4.0.F160W_orig.cat', format='ascii.sextractor')
-    cat = table.read('test6_drz_sci.cat', format='ascii.sextractor')
+    cat = table.read('test7_drz_sci.cat', format='ascii.sextractor')
     
     top = 0.075
     bottom = 0.1
@@ -31,9 +31,9 @@ def mag_radius():
         
     gs1 = gridspec.GridSpec(1,2)
     
-    ax1 = fig.add_subplot(gs1[0,0], ylim=[1, 20], xlim=[14,26])
-    ax1.plot(orig['MAG_AUTO'],orig['FLUX_RADIUS'], '.', color='0.7',markersize=0.5)
-    ax1.plot(cat['MAG_AUTO'],cat['FLUX_RADIUS']*0.1/0.06, 'o', color='black', markersize=1, alpha=0.5)
+    ax1 = fig.add_subplot(gs1[0,0], ylim=[0.8, 20], xlim=[14,26])
+    ax1.plot(orig['MAG_AUTO'],orig['FLUX_RADIUS']*0.06/0.1, '.', color='0.7',markersize=0.5)
+    ax1.plot(cat['MAG_AUTO'],cat['FLUX_RADIUS'], 'o', color='black', markersize=1, alpha=0.5)
     ax1.set_xlabel('MAG_AUTO F160W')
     ax1.set_ylabel('FLUX_RADIUS')
     ax1.set_yscale('log')
@@ -41,8 +41,9 @@ def mag_radius():
     stars = (cat['MAG_AUTO'] > 15.) & (cat['MAG_AUTO'] < 22.) & (cat['FLUX_APER_5']/cat['FLUX_APER'] > 1.1) & (cat['FLUX_APER_5']/cat['FLUX_APER'] < 1.2)
     #stars = (cat['MAG_AUTO'] > 15.) & (cat['MAG_AUTO'] < 23.) & (cat['FLUX_RADIUS']*0.1/0.06 < 5.15 - 0.115*cat['MAG_AUTO']) & (cat['FLUX_RADIUS']*0.1/0.06 > 2.1)
     
-    ax1.plot(cat['MAG_AUTO'][cr],cat['FLUX_RADIUS'][cr]*0.1/0.06, 'o', color='blue', markersize=2, alpha=1.0)
-    ax1.plot(cat['MAG_AUTO'][stars],cat['FLUX_RADIUS'][stars]*0.1/0.06, 'o', color='red', markersize=2, alpha=1.0, markeredgecolor='red')
+    #ax1.plot(cat['MAG_AUTO'][cr],cat['FLUX_RADIUS'][cr], 'o', color='blue', markersize=2, alpha=1.0)
+    ax1.plot(cat['MAG_AUTO'][stars],cat['FLUX_RADIUS'][stars], 'o', color='red', markersize=2, alpha=1.0, markeredgecolor='red')
+    print 'STARS: mean: {} / median{}'.format(np.mean(cat['FWHM_IMAGE'][stars]), np.median(cat['FWHM_IMAGE'][stars]))
     
     #yy_select = -0.115*np.array([14.,23.]) +5.15
     #ax1.plot(np.array([14.,23.]), yy_select,'--',color='red')
@@ -71,7 +72,6 @@ def mag_radius():
     fig.savefig('mag_radius.pdf', dpi=200, transparent=False)
     fig.savefig('mag_radius.png', dpi=200, transparent=False)
     
-        
 def noise_distribution(master_root='icxe15010'):
         
     import threedhst
@@ -371,13 +371,13 @@ def overall_offsets_vs_time():
     for j, file in enumerate(files):
         root = '{}'.format(file.split('_')[1].split('.')[0])
         ax1.set_xlim([-5., 3100.])
-        ax1.set_ylim([-0.005,0.15])
+        ax1.set_ylim([-0.005,0.15*60.])
         ax1.set_xlabel('Time Since Beginning of Orbit\n[seconds]', fontsize=fs)
-        ax1.set_ylabel('Offset from Commanded Position\n[arcmin]', fontsize=fs)
+        ax1.set_ylabel('Offset from Commanded Position\n[arcsec]', fontsize=fs)
         root = '{}'.format(file.split('_')[1].split('.')[0])
             
         data = table.read(file, format='ascii',  names=('file','x','y','rot','scale','x_rms','y_rms'))    
-        small_off  = np.sqrt(data['x']**2 + data['y']**2)*0.12/60.
+        small_off  = np.sqrt(data['x']**2 + data['y']**2)*0.12
         #colors = (scalarMap.to_rgba(cc) for cc in range(len(small_off)))
         drift_rate = [0.0]
                 
@@ -403,10 +403,9 @@ def overall_offsets_vs_time():
         ax2.plot(time, drift_rate,linestyle=lines[j], color='0.5', zorder=0)
         ax2.scatter(time, drift_rate, c=range(len(small_off)), cmap='jet', s=35., edgecolors='black', alpha=0.7)
         
-        
-        
     plt.show(block=False)
     fig.savefig('overall_offsets_vs_time.png', dpi=200, transparent=False)
+    fig.savefig('overall_offsets_vs_time.pdf', dpi=200, transparent=False)
 
         
 def gyro_drift():
@@ -714,6 +713,7 @@ def area_mag():
         mag = 2.5*np.log10(np.sqrt(imaging[key][0]/0.125))+25.5
         ax.plot(imaging[key][1],mag, 's', markersize=7, color='black')
         ax.text(imaging[key][1]+imaging[key][2], mag+imaging[key][3], key, ha='center', va='top', fontsize=9)
+        print key, mag
         if key == 'HUDF09-1':
             ax.plot([13+50, 13+130], [mag, mag+0.17], color='black', lw=1.)
         if key == 'HUDF09-2':
@@ -722,12 +722,12 @@ def area_mag():
             ax.plot()
 
     
-    ax.plot([2000.], [25.3], 's', markersize=12, color='red')
-    ax.text(2000., 25.7, 'GO-14114', multialignment='center', color='red',fontsize=10, ha='center', va='top')
+    ax.plot([2000.], [25.0], 's', markersize=12, color='red')
+    ax.text(2000., 25.3, 'GO-14114', multialignment='center', color='red',fontsize=10, ha='center', va='top')
     ax.text(1200, 28.5, 'HST/WFC3 F160W\n imaging', fontsize =12, multialignment='center')
     
     ax.set_xlim([-100, 2490.])
-    ax.set_ylim([24.95, 29.5])
+    ax.set_ylim([24.65, 29.5])
     ax.set_xlabel('Area [arcmin$^2$]', fontsize=12)
     ax.set_ylabel('5$\sigma$ Point Source Depth [AB mag]', fontsize=12)
     minorLocator   = AutoMinorLocator()
@@ -744,6 +744,220 @@ def area_mag():
     fig.savefig('area_mag.png', dpi=200, transparent=False)
     fig.savefig('area_mag.pdf', dpi=200, transparent=False)
 
+def mosaic_demo():
+    
+    mosaic = fits.open('test7_drz_sci.fits')
+    ### open COSMOS-15 mosaics
+    cos15 = fits.open('icxe15010_test_drz_sci.fits')
+    ### open CANDELS mosaic
+    candels = fits.open('cosmos_3dhst_cutout.fits')  
+
+    fig = unicorn.catalogs.plot_init(square=True, xs=10., aspect=0.835, 
+        fontsize=8, left=0.02, right=0.02, bottom=0.02, top=0.02)
+
+    gs1 = gridspec.GridSpec(1,1)
+    gs2 = gridspec.GridSpec(2,1, left=0.65, right=0.98, top=0.8, bottom=0.4)
+    gs3 = gridspec.GridSpec(1,2, left=0.40, right=0.88, top = 0.3, bottom=0.05)
+    fig.subplots_adjust(wspace=0.05)
+    fig.subplots_adjust(hspace=0.05)
+
+    ax1 = fig.add_subplot(gs1[0,0], xlim=[0,12200], ylim=[0,10200])
+    im1 = ax1.imshow(mosaic[0].data, cmap = pylab.cm.Greys, vmin=-0.01, 
+        vmax=0.5, interpolation='None')
+    ax1.plot([2150,3050,3050,2150,2150],[3250,3250,3850,3850,3250],'-',color='black')
+    ax1.plot([1900,2125,2125,1900,1900],[5250,5250,5400,5400,5250],'-',color='black')
+    ax1.tick_params(axis='both',which='both',top='off',bottom='off', right='off', left='off')
+    ax1.axis('off')
+    ax1.set_xticklabels([])
+    ax1.set_yticklabels([])
+     
+    ### plot mosaic with boxes at the correct positions
+    
+    ### plot candels outline
+    
+    ### plot zooms of the unsmeared and smeared mosaics
+    ax2 = fig.add_subplot(gs2[0,0], xlim=[0,225], ylim=[0,150])
+    im2 = ax2.imshow(mosaic[0].data[5250:5400,1900:2125], cmap = pylab.cm.Greys, vmin=-0.01, 
+        vmax=0.4, interpolation='bicubic')
+    ax2.tick_params(axis='both',which='both',top='off',bottom='off', right='off', left='off')
+    ax2.text(20,15,'COSMOS-WIDIR Mosaic', fontsize=10)
+    ax2.set_xticklabels([])
+    ax2.set_yticklabels([])
+
+    ax3 = fig.add_subplot(gs2[1,0], xlim=[0,225], ylim=[0,150])
+    im3 = ax3.imshow(cos15[0].data[5250:5400,1900:2125], cmap = pylab.cm.Greys, vmin=-0.01, 
+        vmax=0.4, interpolation='bicubic')
+    ax3.text(20,15,'Uncorrected (smeared) image', fontsize=10)    
+    ax3.tick_params(axis='both',which='both',top='off',bottom='off', right='off', left='off')
+    ax3.set_xticklabels([])
+    ax3.set_yticklabels([])
+    
+    ### plot zooms of our mosaic and CANDELS
+    ax4 = fig.add_subplot(gs3[0,0], xlim=[0,900], ylim=[0,600])
+    im4 = ax4.imshow(mosaic[0].data[3250:3850,2150:3050], cmap = pylab.cm.Greys, vmin=-0.01, 
+        vmax=0.5, interpolation='bicubic')
+    ax4.text(50,50,'COSMOS-WIDIR Mosaic', fontsize=10)
+    ax4.tick_params(axis='both',which='both',top='off',bottom='off', right='off', left='off')
+    ax4.set_xticklabels([])
+    ax4.set_yticklabels([])
+
+    ax5 = fig.add_subplot(gs3[0,1], xlim=[0,1500], ylim=[0,1000])
+    im5 = ax5.imshow(candels[0].data[880:1880,610:2110], cmap = pylab.cm.Greys, vmin=-0.01, 
+        vmax=0.1, interpolation='bicubic')
+    ax5.text(50,83,'CANDELS Mosaic', fontsize=10)    
+    ax5.tick_params(axis='both',which='both',top='off',bottom='off', right='off', left='off')
+    ax5.set_xticklabels([])
+    ax5.set_yticklabels([])
+
+    plt.show(block=False)
+    
+    fig.savefig('mosaic_demo.png', dpi=200, transparent=False)
+    fig.savefig('mosaic_demo.pdf', dpi=200, transparent=False)
+    
+
+def plot_galfit():
+    """
+    Makes the plot comparing the GALFIT derived parameters from the new mosaics to CANDELS.
+    """    
+
+    import threedhst
+    from my_python.pyspherematch import spherematch
+    
+    fs=9
+    matplotlib.rc('xtick',labelsize=fs)
+    matplotlib.rc('ytick',labelsize=fs)
+    
+    mag_limit=21.
+    
+    ### read in CANDELS size measurements
+    old = table.read('F160W_galfit_v4.0.cat.FITS')
+    big_cat = table.read('/3DHST/Photometry/Release/v4.1/COSMOS/Catalog/cosmos_3dhst.v4.1.cat.FITS')
+    old = old[(old['mag'] <= mag_limit) & (old['f'] < 2) & (big_cat['use_phot'] == 1)]
+    
+    ### read in new data from Arjen: H_v2.cat
+    print 'Reading H_v4.cat'
+    new = table.read('H_v4.cat', format='ascii')
+    new = new[(new['mag'] <= mag_limit) & (new['f'] < 2)]
+    
+    ### cross-match coordinates
+    idx_n, idx_o, d = spherematch(new['RA'], new['DEC'], old['ra'], old['dec'],tol = 0.5/3600.)
+    print 'Total matches: {}'.format(len(idx_n))
+    
+    ### make plot
+    fig = unicorn.catalogs.plot_init(square=True, xs=8., aspect=1.0, 
+        fontsize=8, left=0.15, right=0.1, bottom=0.15, top=0.05)
+
+    gs = gridspec.GridSpec(2,2)
+    fig.subplots_adjust(wspace=0.20)
+    fig.subplots_adjust(hspace=0.20)
+
+    ax1 = fig.add_subplot(gs[0,0], xlim=[16,22], ylim=[16,22])
+    ax1.plot([0,100],[0,100],':', color='gray', alpha=0.8)
+    ax1.plot(new['mag'][idx_n],old['mag'][idx_o],'o', color='0.5', alpha=0.5, markersize=4.)
+    ax1.set_xlabel('COSMOS-WIDIR F160W Magnitude', fontsize=fs)
+    ax1.set_ylabel('CANDELS F160W Magnitude', fontsize=fs)
+    diff = new['mag'][idx_n] - old['mag'][idx_o]
+    print 'Magnitude: \nMEDIAN: {}\nNMAD: {}\n\n'.format(np.median(diff), threedhst.utils.nmad(diff))
+    
+    ax2 = fig.add_subplot(gs[0,1], xlim=[-1,0.5], ylim=[-1,0.5])
+    ax2.plot([-1,1],[-1,1],':', color='gray', alpha=0.8)
+    ax2.plot(np.log10(new['re'][idx_n]),np.log10(old['re'][idx_o]),'o', color='0.5', alpha=0.5, markersize=4.)
+    ax2.set_xlabel('COSMOS-WIDIR log$_{10}$(Reff)', fontsize=fs)
+    ax2.set_ylabel('CANDELS log$_{10}$(Reff)', fontsize=fs, labelpad=0)
+    diff = (new['re'][idx_n]) - (old['re'][idx_o])
+    print 'log(Reff): \nMEDIAN: {}\nNMAD: {}\n\n'.format(np.median(diff), threedhst.utils.nmad(diff))
+    print np.median(new['re'][idx_n])
+
+    ax3 = fig.add_subplot(gs[1,0], xlim=[-0.2, 1.0], ylim=[-0.2, 1.0])
+    ax3.plot([-1,100],[-1,100],':', color='gray', alpha=0.8)
+    ax3.plot(np.log10(new['n'][idx_n]),np.log10(old['n'][idx_o]),'o', color='0.5', alpha=0.5, markersize=4.)
+    ax3.set_xlabel('COSMOS-WIDIR log$_{10}$(n)', fontsize=fs)
+    ax3.set_ylabel('CANDELS log$_{10}$(n)', fontsize=fs, labelpad=0)
+    diff = (new['n'][idx_n]) - (old['n'][idx_o])
+    print 'log(n): \nMEDIAN: {}\nNMAD: {}\n\n'.format(np.median(diff), threedhst.utils.nmad(diff))
+
+    ax4 = fig.add_subplot(gs[1,1], xlim=[0,1.0], ylim=[0,1.0])
+    ax4.plot([0,100],[0,100],':', color='gray', alpha=0.8)
+    ax4.plot(new['q'][idx_n],old['q'][idx_o],'o', color='0.5', alpha=0.5, markersize=4.)
+    ax4.set_xlabel('COSMOS-WIDIR Axis Ratio', fontsize=fs)
+    ax4.set_ylabel('CANDELS Axis Ratio', fontsize=fs)
+    diff = new['q'][idx_n] - old['q'][idx_o]
+    print 'Axis ratio: \nMEDIAN: {}\nNMAD: {}\n\n'.format(np.median(diff), threedhst.utils.nmad(diff))
+    
+    plt.show(block=False)
+    fig.savefig('galfit_gyro_comp.pdf', dpi=200)
+    fig.savefig('galfit_gyro_comp.png', dpi=200)
+    
+    
+def mag_depth():
+    
+    orig = table.read('/3DHST/Photometry/Release/v4.0/COSMOS/Detection/cosmos_3dhst.v4.0.F160W_orig.cat', format='ascii.sextractor')
+    cat = table.read('test7_drz_sci.cat', format='ascii.sextractor')
+    
+    fig = unicorn.catalogs.plot_init(square=True, xs=6., aspect=0.9, fontsize=10., left=0.15, right=0.15, top=0.1, bottom=0.15)
+    ax = fig.add_subplot(111)
+
+    n_orig, bins, patches = ax.hist(orig['MAG_AUTO'], bins=25, 
+        range=[16., 30.], color='0.5', alpha=0.5, lw=2, histtype='step')
+    n_cat, bins, patches = ax.hist(cat['MAG_AUTO'], bins=bins, 
+        range=[16., 30.], color='red', alpha=0.5, histtype='step', lw=2)
+        
+    ax.set_xlim([17.,28.])
+    ax.set_ylim([0, 8e3])
+    ax.set_xlabel('F160W Magnitude', fontsize=12)
+    ax.set_ylabel('N')
+    
+    ax2 = ax.twinx()#fig.add_subplot(111, sharex=ax, frameon=False)
+    bin_c = bins[:-1] + (bins[1:] - bins[:-1])/2
+    width = np.mean(bins[1:] - bins[:-1])
+    ax2.plot(bin_c+width/2, (n_cat/142.429)/(n_orig/183.9), color='black', lw=2, alpha=0.8)
+    ax2.plot([15.,31.], [1.0, 1.0], linestyle='dashed', color='0.8', alpha=0.5)
+    ax2.plot([15.,31.], [0.9, 0.9], linestyle='dashed', color='0.8', alpha=0.5)
+    ax2.plot([15.,31.], [0.75,0.75], linestyle='dashed', color='0.8', alpha=0.5)
+    ax2.plot([15.,31.], [0.5, 0.5], linestyle='dashed', color='0.8', alpha=0.5)
+    ax2.set_ylim([0.,1.3])
+    ax2.set_xlim([17.,28.])
+    ax2.set_ylabel('Fraction')
+    plt.show(block=False)
+    
+    fig.savefig('mag_depth.pdf', dpi=200)
+    fig.savefig('mag_depth.png', dpi=200)    
+    
+def psf_plot():
+    
+    psf = fits.open('test7_psf_v2.fits')
+    wht = fits.open('test7_wht_v2.fits')
+    
+    ### make plot
+    fig = unicorn.catalogs.plot_init(square=True, xs=6., aspect=0.6, 
+        fontsize=8, left=0.05, right=0.05, bottom=0.1, top=0.00)
+
+    gs = gridspec.GridSpec(1,2)
+    fig.subplots_adjust(wspace=0.10)
+    fig.subplots_adjust(hspace=0.10)
+    
+    ax1 = fig.add_subplot(gs[0], xlim=[0,68], ylim=[0,68])
+    ax1.axis('off')
+    ax2 = fig.add_subplot(gs[1], xlim=[0,68], ylim=[0,68])
+    ax2.axis('off')
+    
+    im1 = ax1.imshow(psf[0].data/np.max(psf[0].data), cmap = pylab.cm.Greys_r, vmin=0.0, 
+        vmax=0.015, interpolation='None')
+    cbar_ax1 = fig.add_axes([0.06, 0.12, 0.40, 0.07])
+    cbar1 = plt.colorbar(im1, cax = cbar_ax1,orientation='horizontal', ticks = [0.0, 0.005, 0.010, 0.015])
+    cbar1.ax.set_xticklabels([0.0, 0.005, 0.010, 0.015])
+    
+    im2 = ax2.imshow(wht[0].data/np.max(wht[0].data), cmap = pylab.cm.Greys_r, vmin=0.7, 
+        vmax=1., interpolation='None')
+    cbar_ax2 = fig.add_axes([0.54, 0.12, 0.40, 0.07])
+    cbar2 = plt.colorbar(im2, cax = cbar_ax2,orientation='horizontal', ticks = [0.7,0.8,0.9,1.0])
+    cbar2.ax.set_xticklabels([0.7,0.8,0.9,1.0])
+        
+    plt.show(block=False)
+    
+    fig.savefig('psf_plot.pdf', dpi=200)
+    fig.savefig('psf_plot.png', dpi=200)    
+    
 
 def gauss(x, *p):
     
