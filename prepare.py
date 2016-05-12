@@ -20,6 +20,12 @@ def split_IMA(root='icxe15wwq', PATH='../RAW/'):
     
     """
     Make FLTs from the individual reads.
+
+    root : str
+        Root name of the FLT that will be split into individual images.
+
+    PATH : str
+        Path to the directory where the clean RAW files are located.
     """
     
     FLAT_F160W = fits.open(os.path.join(os.getenv('iref'),'uc721145i_pfl.fits'))[1].data
@@ -79,6 +85,12 @@ def make_pointing_asn(root='icxe15wwq', master_root='icxe15010'):
     
     """
     Makes an new association table for the reads extracted from a given FLT.
+
+    root : str
+        Root name of the FLT that was split into individual images. Will be the root name of the new ASN.
+
+    master_root : str
+        Master ASN root.
     """
     
     master_asn = fits.open('{}_asn.fits'.format(master_root))
@@ -113,10 +125,19 @@ def subtract_background_reads(root='icxe15wwq', master_root='icxe15010', subtrac
     """
     Subtract background from the individual reads. Uses the DRZ and SEG images produced in the 
     unicorn FLT background subtraction. 
-    
-    By default it does not subtract the background but writes it to the header.
-    
-    If reset_stars_dq = True it will reset cosmic rays within objects to 0 because the centers of stars are flagged.
+
+    root : str
+        Root name of the ASN which describes the collection of images.
+
+    master_root : str
+        Root of the master ASN.
+
+    subtract : bool
+        By default it does not subtract the background but writes it to the header. Set to True to subtract background.
+
+    reser_strs_dq : bool
+        If reset_stars_dq = True it will reset cosmic rays within objects to 0 because the centers of stars are flagged.
+
     """
     
     import threedhst
@@ -172,6 +193,15 @@ def subtract_background_reads(root='icxe15wwq', master_root='icxe15010', subtrac
         print 'Background subtraction, {}_flt.fits:  {}'.format(exp, sky_level)
         
 def fix_cosmic_rays(root='icxe15wwq', master_root = 'icxe15010'):
+    
+    """ Resets cosmic rays within the seg maps of objects and uses L.A.Cosmic to find them again.
+
+    root : str
+
+    master_root : str
+        
+
+    """
     
     from cosmics import cosmics
     import stwcs
