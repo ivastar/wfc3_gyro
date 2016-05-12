@@ -8,7 +8,7 @@ import astropy
 from astropy.table import Table as table
 from astropy.io import fits
 import numpy as np
-import glob
+import glob, os
 
 def mag_radius():
     
@@ -635,7 +635,7 @@ def footprints_all():
 def make_hist_plot_bw():
     
     import astropy.io.ascii as ascii
-    from matplotlib.ticker import MultipleLocator, FormatStrFormatter,AutoMinorLocator
+    from matplotlib.ticker import MultipleLocator, FormatStrFormatter,AutoMinorLocator, ScalarFormatter
 
     minorLocator   = MultipleLocator(10)
     
@@ -649,7 +649,7 @@ def make_hist_plot_bw():
     ax = fig.add_subplot(111)
 
     ax.fill_between([0.,0.5], 0, 30, color='0.85', alpha=0.9)
-    nn, bins, patches = ax.hist(data['rate']*25., bins=60, range=[0.,6.], color='black', histtype='step')    
+    nn, bins, patches = ax.hist(data['rate']*25., bins=60, range=[0.,6.], color='black', histtype='step', linestyle='dotted')    
 
     test_val = data['rate'][data['root'] == 'ib2u22prq']
         
@@ -676,23 +676,53 @@ def make_hist_plot_bw():
                 names=('file','x','y','rot','scale','x_rms','y_rms'))
             drift_rate.append(25.*np.sqrt((drift['x'][0]-drift['x'][-1])**2 + (drift['y'][0]-drift['y'][-1])**2)/t_exp)
     
-    nn_sh, bins_sh, patches_sh = ax.hist(drift_rate, bins=60, range=[0.,6.], color='red', histtype='step') 
+    nn_sh, bins_sh, patches_sh = ax.hist(drift_rate, bins=5, range=[0.,0.5], color='red', histtype='step', lw=3) 
     print "Mean drift: {}\nMedian drift: {}".format(np.mean(drift_rate), np.median(drift_rate))   
 
-    ax.set_xlim([-0.15, 5.5])
+    ax.set_xlim([-0.15, 2.7])
     ax.set_ylim([0., 25])
-    ax.set_xlabel('Drift in Pixels per 25 Seconds', fontsize=12)
-    ax.set_ylabel('N')
+    ax.set_xlabel('Drift in WFC3/IR Pixels per 25 Seconds', fontsize=12)
+    ax.set_ylabel('Number of Images')
     ax.tick_params(axis='both', which='major',labelsize=12)
     minorLocator   = AutoMinorLocator()
     ax.xaxis.set_minor_locator(minorLocator)
     minorLocator   = AutoMinorLocator(5)
     ax.yaxis.set_minor_locator(minorLocator)
-    ax.tick_params(which='minor', length=2)    
+    ax.tick_params(which='minor', length=2)   
     plt.show(block=False)
     
     plt.savefig('drift_hist_bw.png',dpi=100,transparent=False)
     plt.savefig('drift_hist_bw.pdf',dpi=100,transparent=False)
+
+def xy_shifts():
+    import scipy
+    
+    # x gaussian: [ 3.41423523  1.29066909  6.73498474] or uniform [-70, 70np.]
+    # y gaussian: [ 5.27724105 -0.78413847 -4.80223471]
+    
+    tab = table.read('allshifts.txt', format='ascii')
+
+    nn, bins, patches = plt.hist(tab['col2'], bins=50, range=[-70,70], color='red', alpha=0.5)
+    centers = 0.5*(bins[1:]+bins[:-1])
+    coeff_g, var_g = scipy.optimize.curve_fit(gauss, centers , nn, p0=[np.max(nn),0.,100.])
+    fit_g = gauss(centers, *coeff_g)
+    plt.plot(centers, fit_g, color='red')
+    print coeff_g, np.min()
+    
+    nn1, bins1, patches = plt.hist(tab['col3'], bins=bins, range=[-70,70], color='blue', alpha=0.5)
+    centers1 = 0.5*(bins1[1:]+bins1[:-1]) 
+    coeff_g, var_g = scipy.optimize.curve_fit(gauss, centers1 , nn1, p0=[np.max(nn1),0.,100.])
+    fit_g = gauss(centers, *coeff_g)
+    plt.plot(centers1, fit_g, color='blue')
+    print coeff_g
+    
+    plt.show(block=False)
+
+def gauss(x, *p):
+    
+    A, mu, sigma = p
+    return A*np.exp(-(x-mu)**2/(2.*sigma**2))
+    
 
 def area_mag():
     
@@ -780,7 +810,7 @@ def mosaic_demo():
     im2 = ax2.imshow(mosaic[0].data[5250:5400,1900:2125], cmap = pylab.cm.Greys, vmin=-0.01, 
         vmax=0.4, interpolation='bicubic')
     ax2.tick_params(axis='both',which='both',top='off',bottom='off', right='off', left='off')
-    ax2.text(20,15,'COSMOS-WIDIR Mosaic', fontsize=10)
+    ax2.text(20,15,'COSMOS-DASH Mosaic', fontsize=10)
     ax2.set_xticklabels([])
     ax2.set_yticklabels([])
 
@@ -796,7 +826,7 @@ def mosaic_demo():
     ax4 = fig.add_subplot(gs3[0,0], xlim=[0,900], ylim=[0,600])
     im4 = ax4.imshow(mosaic[0].data[3250:3850,2150:3050], cmap = pylab.cm.Greys, vmin=-0.01, 
         vmax=0.5, interpolation='bicubic')
-    ax4.text(50,50,'COSMOS-WIDIR Mosaic', fontsize=10)
+    ax4.text(50,50,'COSMOS-DASH Mosaic', fontsize=10)
     ax4.tick_params(axis='both',which='both',top='off',bottom='off', right='off', left='off')
     ax4.set_xticklabels([])
     ax4.set_yticklabels([])
@@ -822,6 +852,7 @@ def plot_galfit():
 
     import threedhst
     from my_python.pyspherematch import spherematch
+    from matplotlib.ticker import ScalarFormatter, MultipleLocator, FormatStrFormatter
     
     fs=9
     matplotlib.rc('xtick',labelsize=fs)
@@ -854,32 +885,51 @@ def plot_galfit():
     ax1 = fig.add_subplot(gs[0,0], xlim=[16,22], ylim=[16,22])
     ax1.plot([0,100],[0,100],':', color='gray', alpha=0.8)
     ax1.plot(new['mag'][idx_n],old['mag'][idx_o],'o', color='0.5', alpha=0.5, markersize=4.)
-    ax1.set_xlabel('COSMOS-WIDIR F160W Magnitude', fontsize=fs)
+    ax1.set_xlabel('COSMOS-DASH F160W Magnitude', fontsize=fs)
     ax1.set_ylabel('CANDELS F160W Magnitude', fontsize=fs)
     diff = new['mag'][idx_n] - old['mag'][idx_o]
     print 'Magnitude: \nMEDIAN: {}\nNMAD: {}\n\n'.format(np.median(diff), threedhst.utils.nmad(diff))
     
-    ax2 = fig.add_subplot(gs[0,1], xlim=[-1,0.5], ylim=[-1,0.5])
-    ax2.plot([-1,1],[-1,1],':', color='gray', alpha=0.8)
-    ax2.plot(np.log10(new['re'][idx_n]),np.log10(old['re'][idx_o]),'o', color='0.5', alpha=0.5, markersize=4.)
-    ax2.set_xlabel('COSMOS-WIDIR log$_{10}$(Reff)', fontsize=fs)
-    ax2.set_ylabel('CANDELS log$_{10}$(Reff)', fontsize=fs, labelpad=0)
-    diff = (new['re'][idx_n]) - (old['re'][idx_o])
-    print 'log(Reff): \nMEDIAN: {}\nNMAD: {}\n\n'.format(np.median(diff), threedhst.utils.nmad(diff))
-    print np.median(new['re'][idx_n])
+    ax2 = fig.add_subplot(gs[0,1], xlim=[0.1,3.5], ylim=[0.1,3.5])
+    ax2.plot([0.01,5],[0.01,5],':', color='gray', alpha=0.8)
+    ax2.plot(new['re'][idx_n],old['re'][idx_o],'o', color='0.5', alpha=0.5, markersize=4.)
+    ax2.set_xlabel('COSMOS-DASH $R_{eff}$ [arcsec]', fontsize=fs)
+    ax2.set_ylabel('CANDELS $R_{eff}$ [arcsec]', fontsize=fs, labelpad=0)
 
-    ax3 = fig.add_subplot(gs[1,0], xlim=[-0.2, 1.0], ylim=[-0.2, 1.0])
+    ax2.set_xscale('log')
+    ax2.xaxis.set_major_formatter(ScalarFormatter())
+    ax2.xaxis.set_major_locator(MultipleLocator(1))
+    ax2.xaxis.set_major_formatter(FormatStrFormatter('%d'))
+    ax2.set_yscale('log')
+    ax2.yaxis.set_major_formatter(ScalarFormatter())
+    ax2.yaxis.set_major_locator(MultipleLocator(1))
+    ax2.yaxis.set_major_formatter(FormatStrFormatter('%d'))
+    
+    diff = np.log10(new['re'][idx_n]) - np.log10(old['re'][idx_o])
+    print 'log(Reff): \nMEDIAN: {}\nNMAD: {}\n\n'.format(np.median(diff), threedhst.utils.nmad(diff))
+    print np.median(new['re'][idx_n]/old['re'][idx_o])
+
+    ax3 = fig.add_subplot(gs[1,0], xlim=[0.6, 8.9], ylim=[0.6,8.9])
     ax3.plot([-1,100],[-1,100],':', color='gray', alpha=0.8)
-    ax3.plot(np.log10(new['n'][idx_n]),np.log10(old['n'][idx_o]),'o', color='0.5', alpha=0.5, markersize=4.)
-    ax3.set_xlabel('COSMOS-WIDIR log$_{10}$(n)', fontsize=fs)
-    ax3.set_ylabel('CANDELS log$_{10}$(n)', fontsize=fs, labelpad=0)
+    ax3.plot(new['n'][idx_n],old['n'][idx_o],'o', color='0.5', alpha=0.5, markersize=4.)
+    ax3.set_xlabel("COSMOS-DASH Sersic Index", fontsize=fs)
+    ax3.set_ylabel("CANDELS Sersic Index", fontsize=fs, labelpad=0)
+    ax3.set_xscale('log')
+    ax3.xaxis.set_major_formatter(ScalarFormatter())
+    ax3.xaxis.set_major_locator(MultipleLocator(1))
+    ax3.xaxis.set_major_formatter(FormatStrFormatter('%d'))
+    ax3.set_yscale('log')
+    ax3.yaxis.set_major_formatter(ScalarFormatter())
+    ax3.yaxis.set_major_locator(MultipleLocator(1))
+    ax3.yaxis.set_major_formatter(FormatStrFormatter('%d'))
+
     diff = (new['n'][idx_n]) - (old['n'][idx_o])
     print 'log(n): \nMEDIAN: {}\nNMAD: {}\n\n'.format(np.median(diff), threedhst.utils.nmad(diff))
 
     ax4 = fig.add_subplot(gs[1,1], xlim=[0,1.0], ylim=[0,1.0])
     ax4.plot([0,100],[0,100],':', color='gray', alpha=0.8)
     ax4.plot(new['q'][idx_n],old['q'][idx_o],'o', color='0.5', alpha=0.5, markersize=4.)
-    ax4.set_xlabel('COSMOS-WIDIR Axis Ratio', fontsize=fs)
+    ax4.set_xlabel('COSMOS-DASH Axis Ratio', fontsize=fs)
     ax4.set_ylabel('CANDELS Axis Ratio', fontsize=fs)
     diff = new['q'][idx_n] - old['q'][idx_o]
     print 'Axis ratio: \nMEDIAN: {}\nNMAD: {}\n\n'.format(np.median(diff), threedhst.utils.nmad(diff))
@@ -958,9 +1008,432 @@ def psf_plot():
     fig.savefig('psf_plot.pdf', dpi=200)
     fig.savefig('psf_plot.png', dpi=200)    
     
+def rotation_check():
+    
+    import unicorn.survey_paper as sup
+    from my_python.pyspherematch import spherematch as psh
+    import matplotlib.colors as colors
+    import matplotlib.cm as cmx
+    
+    os.chdir('/3DHST/Spectra/Work/14114/PREPARE/')
+    
+    REF_CAT = '../REF/IPAC_ACS.fits'
+    NEW_CAT = 'test7_drz_sci.cat'
+    
+    ref_cat = table.read(REF_CAT)
+    new_cat = table.read(NEW_CAT, format='ascii.sextractor')
+    
+    idx1, idx2, dd = psh(new_cat['X_WORLD'], new_cat['Y_WORLD'], ref_cat['ra'], ref_cat['dec'], tol=1./3600.)
 
+    fig = unicorn.catalogs.plot_init(square=True, xs=10., aspect=1.1, 
+        fontsize=8, left=0.18, right=0.02, bottom=0.10, top=0.10)
+    ax = fig.add_subplot(111)
+    jet = cm = plt.get_cmap('jet')
+    cNorm = colors.Normalize(vmin=0, vmax=9)
+    scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=jet)    
+    
+    xlim = [150.270, 149.99]
+    ylim = [2.45, 2.751]
+    xticklab = [r'$10^\mathrm{h}01^\mathrm{m}00^\mathrm{s}$', r'$10^\mathrm{h}00^\mathrm{m}45^\mathrm{s}$',r'$10^\mathrm{h}00^\mathrm{m}30^\mathrm{s}$',r'$10^\mathrm{h}00^\mathrm{m}15^\mathrm{s}$',r'$10^\mathrm{h}00^\mathrm{m}00^\mathrm{s}$']
+    xtickv = [sup.degrees(10,01,00, hours=True),sup.degrees(10,00,45, hours=True),sup.degrees(10,00,30, hours=True),sup.degrees(10,00,15, hours=True),sup.degrees(10,00,00, hours=True)]
+    yticklab = [r'$+02^\circ30^\prime00^{\prime\prime}$',r'$+02^\circ35^\prime00^{\prime\prime}$', r'$+02^\circ40^\prime00^{\prime\prime}$',r'$+02^\circ45^\prime00^{\prime\prime}$']
+    ytickv = [sup.degrees(2, 30, 00, hours=False),sup.degrees(2, 35, 00, hours=False),sup.degrees(2, 40, 00, hours=False),sup.degrees(2, 45, 00, hours=False)]
+    factor=20.
+    
+    ax.quiver(new_cat['X_WORLD'][idx1], new_cat['Y_WORLD'][idx1], (new_cat['X_WORLD'][idx1]-ref_cat['ra'][idx2])*3600.*2,
+        (new_cat['Y_WORLD'][idx1]-ref_cat['dec'][idx2])*3600.*2,
+        width=0.8, linewidth=0.3, units='dots', headwidth=4, minshaft=1, headlength=5, pivot='tail', scale=0.025)
+    
+    print np.median(new_cat['X_WORLD'][idx1]-ref_cat['ra'][idx2])*3600., np.median(new_cat['Y_WORLD'][idx1]-ref_cat['dec'][idx2])*3600.
+
+    roots = ['icxe15010', 'icxe16010', 'icxe17010','icxe18010']
+    labels = ['COSMOS-15', 'COSMOS-16','COSMOS-17','COSMOS-18']
+    lines = ['-','--','-.',':']
+    
+    for root, label, linestyle in zip(roots, labels, lines):
+        
+        reg_file = root+'_asn.reg'
+    
+        poly = []
+        with open(reg_file) as f:
+            for line in f:
+                if not line.startswith('fk5'):
+                    region = line.split('#')[0]
+                    poly.append(sup.polysplit(region=region, get_shapely=True))
+
+        shifts = table.read('shifts_{}.txt'.format(root), format='ascii', 
+            names=('file','x','y','rot','scale','x_rms','y_rms'))
+        
+        cc = 0
+        xcen_all = []
+        ycen_all = []
+        for j,(pp, file) in enumerate(zip(poly, shifts['file'])):
+            cc += 1.
+            color = scalarMap.to_rgba(cc)
+            x, y = pp.exterior.xy
+            flt = fits.open(file)
+            xcen = flt[1].header['CRVAL1O']
+            ycen = flt[1].header['CRVAL2O']
+            x_off = (flt[1].header['CRVAL1B']-flt[1].header['CRVAL1O'])*factor
+            y_off = (flt[1].header['CRVAL2B']-flt[1].header['CRVAL2O'])*factor
+            xcen_all.append(xcen)
+            ycen_all.append(ycen)
+            ax.plot(x,y,'-', color=color)
+            #ax.annotate("",xy=(xcen+x_off, ycen+y_off), xytext=(xcen, ycen), 
+            #    arrowprops=dict(arrowstyle='->', color=color))
+            #ax.text(xcen, ycen+0.005, file.split('_')[0], fontsize=9, va='top', ha='center')
+        
+        ax.plot(xcen_all, ycen_all, linestyle=linestyle, markersize=10., 
+            color='black', alpha=0.7, label=label) 
+        ax.plot(xcen_all, ycen_all, '+', markersize=10., color='0.5', alpha=0.7) 
+        #ax.text(xcen_all[0], ycen_all[0]-0.005, label, fontsize=10, va='top', ha='center')
+
+
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)     
+    ax.set_xticklabels(xticklab)
+    xtick = ax.set_xticks(xtickv)
+    ax.set_yticklabels(yticklab)
+    ytick = ax.set_yticks(ytickv)
+    ax.legend(loc='lower right', frameon=False, labelspacing=0.8, fontsize=9, handlelength=10, borderpad=5.)
+    plt.show(block=False)
+        
+    fig.savefig('rotation_check.png'.format(label.lower()), dpi=200, transparent=False)          
+
+def rotation_fits():
+
+    import glob
+    import matplotlib.colors as colors
+    import matplotlib.cm as cmx
+    
+    files = glob.glob('PREP_ROT/shifts_icxe*010.txt')
+    
+    fig = unicorn.catalogs.plot_init(xs=10.,aspect=0.45, left=0.2, right=0.05, bottom=0.15, top=0.15, NO_GUI=False)    
+    gs = gridspec.GridSpec(1,2,top=0.9, bottom=0.15)
+    fig.subplots_adjust(wspace=0.2)
+    fig.subplots_adjust(hspace=0.2)
+    fs = 10
+    matplotlib.rc('xtick',labelsize=fs)
+    matplotlib.rc('ytick',labelsize=fs)
+
+    jet = cm = plt.get_cmap('jet_r')
+    cNorm = colors.Normalize(vmin=0, vmax=8)
+    scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=jet)
+
+
+    ax1 = fig.add_subplot(gs[0])
+    ax2 = fig.add_subplot(gs[1])
+
+    time = np.array([0, 368, 713, 1060, 1405, 1777, 2147, 2519]) + 333.
+    lines = ['-','--','-.',':']
+    labels = ['COSMOS-15', 'COSMOS-16', 'COSMOS-17','COSMOS-18']
+    
+    for j, file in enumerate(files):
+        root = '{}'.format(file.split('_')[1].split('.')[0])
+        ax1.set_xlim([-0.5, 13])
+        ax1.set_ylim([-0.075,0.075])
+        ax1.set_xlabel('Read Number', fontsize=fs)
+        ax1.set_ylabel('Rotation [deg]', fontsize=fs)
+        root = '{}'.format(file.split('_')[1].split('.')[0])
+            
+        data = table.read(file, format='ascii',  names=('file','x','y','rot','scale','x_rms','y_rms'))    
+        rot_rate = [0.0]
+                
+        for k, file in enumerate(data['file'][1:]):
+            if k+1 < 4:
+                t_exp = 255
+            else:
+                t_exp = 277
+            drift = table.read('PREP_ROT/'+file.split('_')[0]+'_shifts.txt', format='ascii', 
+                names=('file','x','y','rot','scale','x_rms','y_rms'))
+            
+            rot = drift['rot']
+            tt = (drift['rot'] > 180.)
+            rot[tt] = drift['rot'][tt] - 360.
+            rot_rate.append(rot[0]-rot[-1])
+            ax1.plot(np.arange(len(drift['rot']))+1, drift['rot'], linestyle=lines[j], 
+                color='0.5', label=labels[j], zorder=0)
+            ax1.scatter(np.arange(len(drift['rot']))+1, drift['rot'], c='0.5', s=10., edgecolors='black', alpha=0.7)
+        
+        
+        ax2.set_xlim([-5., 3100.])
+        ax2.set_ylim([-0.075,0.075])
+        ax2.set_xlabel('Time Since Beginning of Orbit\n[seconds]', fontsize=fs)
+        ax2.set_ylabel('Rotation During Pointing [deg]', fontsize=fs)
+        
+        ax2.plot(time, np.array(rot_rate),linestyle=lines[j], color='0.5', zorder=0)
+        ax2.scatter(time, np.array(rot_rate), c=range(len(rot_rate)), cmap='jet', s=35., edgecolors='black', alpha=0.7)
+        print rot_rate
+        
+    plt.show(block=False)
+    fig.savefig('rotation_fits.png', dpi=200, transparent=False)
+    #fig.savefig('overall_offsets_vs_time.pdf', dpi=200, transparent=False)
+
+def mag_radius_test():
+    
+    from matplotlib.ticker import ScalarFormatter
+    import my_python.mk_region_file
+    
+    orig = table.read('test7_drz_sci_1.8.cat', format='ascii.sextractor')
+    cat = table.read('test7_drz_sci_0.8.cat', format='ascii.sextractor')
+    
+    top = 0.075
+    bottom = 0.1
+    left = 0.15
+    fig = unicorn.catalogs.plot_init(xs=10,aspect=0.5, left=left, right=0.1, bottom=bottom, top=top, NO_GUI=False)
+    fig.subplots_adjust(wspace=0.15)
+    fig.subplots_adjust(hspace=0.1)
+    fs = 10
+    matplotlib.rc('xtick',labelsize=fs)
+    matplotlib.rc('ytick',labelsize=fs)
+        
+    gs1 = gridspec.GridSpec(1,2)
+    
+    ax1 = fig.add_subplot(gs1[0,0], ylim=[0.8, 20], xlim=[14,26])
+    ax1.plot(orig['MAG_AUTO'],orig['FLUX_RADIUS'], '.', color='0.4',markersize=0.9)
+    ax1.plot(cat['MAG_AUTO'],cat['FLUX_RADIUS'], 'o', color='black', markersize=1, alpha=0.5)
+    ax1.set_xlabel('MAG_AUTO F160W')
+    ax1.set_ylabel('FLUX_RADIUS')
+    ax1.set_yscale('log')
+    cr = (cat['FLUX_RADIUS']*0.1/0.06 < 2.)
+    stars = (cat['MAG_AUTO'] > 15.) & (cat['MAG_AUTO'] < 22.) & (cat['FLUX_APER_5']/cat['FLUX_APER'] > 1.1) & (cat['FLUX_APER_5']/cat['FLUX_APER'] < 1.2)
+    
+    #ax1.plot(cat['MAG_AUTO'][stars],cat['FLUX_RADIUS'][stars], 'o', color='red', markersize=2, alpha=1.0, markeredgecolor='red')
+    print 'STARS: mean: {} / median{}'.format(np.mean(cat['FWHM_IMAGE'][stars]), np.median(cat['FWHM_IMAGE'][stars]))
+    
+    ax1.yaxis.set_major_formatter(ScalarFormatter())
+    
+    ax2 = fig.add_subplot(gs1[0,1], ylim=[0.5,4], xlim=[14,26])
+    ax2.plot(orig['MAG_AUTO'], orig['FLUX_APER_5']/orig['FLUX_APER'], '.', color='0.4',markersize=0.9)
+    ax2.plot(cat['MAG_AUTO'], cat['FLUX_APER_5']/cat['FLUX_APER'], 'o', color='black', markersize=1., alpha=0.5)
+    #ax2.plot(cat['MAG_AUTO'][stars], cat['FLUX_APER_5'][stars]/cat['FLUX_APER'][stars], 'o', color='red', markersize=2., alpha=1.0, markeredgecolor='red')
+    ax2.plot(cat['MAG_AUTO'][cr], cat['FLUX_APER_5'][cr]/cat['FLUX_APER'][cr], 'o', color='blue', markersize=2., alpha=1.0)
+    ax2.set_xlabel('MAG_AUTO F160W')
+    ax2.set_ylabel('Flux (2.0\")/Flux (0.5\")')
+    ax2.yaxis.set_major_formatter(ScalarFormatter())
+    
+    my_python.mk_region_file.mk_region_file_from_lists(cat['X_WORLD'][stars],cat['Y_WORLD'][stars],outfile = 'stars', printids='no', color='cyan')
+    my_python.mk_region_file.mk_region_file_from_lists(cat['X_WORLD'][cr],cat['Y_WORLD'][cr],outfile = 'cr', printids='no', color='yellow')
+    
+    plt.show(block=False)
+    
+    #fig.savefig('mag_radius_test.pdf', dpi=200, transparent=False)
+    #fig.savefig('mag_radius_test.png', dpi=200, transparent=False)
+
+def signal_to_noise_test():
+
+    import threedhst.utils
+
+    top = 0.05
+    bottom = 0.15
+    left = 0.15
+    fig = unicorn.catalogs.plot_init(xs=10,aspect=0.5, left=left, right=0.05, bottom=bottom, top=top, NO_GUI=False)
+    fig.subplots_adjust(wspace=0.01)
+    fig.subplots_adjust(hspace=0.01)
+    fs = 9
+    matplotlib.rc('xtick',labelsize=fs)
+    matplotlib.rc('ytick',labelsize=fs)
+    
+    etc_mag = [18.,19.,20.,21.,22.,23.,24.,25.]
+    etc_sn = np.array([509.,318.,195.8,116.7,65.1,33.1,15.2,6.5])
+    etc_sn_high = np.array([493.,295.,166.9,85.9,39.97,17.2,7.09,2.87])
+    
+    factor = (1.-(0.8/3/2.75)) #0.678
+    
+    gs = gridspec.GridSpec(2,4)
+    
+    asn_files = glob.glob('icxe1*010_asn.fits')
+    
+    for file in asn_files:
+        asn = threedhst.utils.ASNFile(file)
+        for ii, exp in enumerate(asn.exposures):
+
+            cat = table.read('/3DHST/Spectra/Work/14114/TEST_SEXTR/{}_drz_sci.cat'.format(exp), format='ascii.sextractor')
+            
+            ax = fig.add_subplot(gs[ii], ylim=[3., 200], xlim=[21,25.5])
+            ax.plot(cat['MAG_APER'], cat['FLUX_APER']/(cat['FLUXERR_APER']/factor), '.', color='0.6',markersize=0.9)
+    
+            stars = (cat['MAG_AUTO'] > 15.) & (cat['MAG_AUTO'] < 22.) & (cat['FLUX_APER_6']/cat['FLUX_APER_1'] > 1.1) & (cat['FLUX_APER_6']/cat['FLUX_APER_1'] < 1.2)
+            ax.plot(cat['MAG_APER'][stars], cat['FLUX_APER'][stars]/(cat['FLUXERR_APER'][stars]/factor), '^', color='black', markersize=2, alpha=1.0, markeredgecolor='0.3')
+    
+            if file == 'icxe18010_asn.fits':
+                ax.text(24,70,'Pointing {}'.format(ii+1), fontsize=9, va='top', ha='center')
+                #ax.plot(etc_mag,etc_sn_high, 'o', color='#b10026',markersize=2)
+                ax.plot(etc_mag,etc_sn_high, '--', color='#b10026',markersize=2)
+                ax.plot(etc_mag,etc_sn_high/1.07, '-', color='#b10026',markersize=2)
+                #ax.plot(etc_mag,etc_sn, 'o', color='black',markersize=2)
+                ax.plot(etc_mag,etc_sn, '--', color='black',markersize=2)
+                ax.plot(etc_mag,etc_sn/1.37, '-', color='black',markersize=2)
+                ax.plot([10,30],[5.,5.], ':', color='0.5')
+                #ax.plot([10,30],[4.,4.], ':', color='0.5')
+                ax.plot([25.,25.],[1.,3000.], ':', color='0.5')
+                ax.set_yscale('log')
+                if (ii == 0) or (ii == 4):
+                    ax.set_ylabel('S/N [r = 0.2" aperture]', fontsize=fs)
+                else:
+                    ax.set_yticklabels([])
+                if (ii < 3):
+                    ax.set_xticklabels([])
+                else:
+                    ax.set_xlabel('AB Magnitude\n[r = 0.2" aperture]', fontsize=fs)
+                    ax.set_xticklabels([22,23,24,25], fontsize=fs)
+                    xtick = ax.set_xticks([22,23,24,25])
+                    
+    
+    plt.show(block=False)
+    fig.savefig('signal_to_noise_test.pdf', dpi=200, transparent=False)
+    fig.savefig('signal_to_noise_test.png', dpi=200, transparent=False)
+    
+def sources_of_noise():
+    
+    top = 0.075
+    bottom = 0.1
+    left = 0.15
+    fig = unicorn.catalogs.plot_init(xs=10,aspect=0.5, left=left, right=0.1, bottom=bottom, top=top, NO_GUI=False)
+    fig.subplots_adjust(wspace=0.15)
+    fig.subplots_adjust(hspace=0.1)
+    fs = 8
+    matplotlib.rc('xtick',labelsize=fs)
+    matplotlib.rc('ytick',labelsize=fs)
+        
+    gs1 = gridspec.GridSpec(1,2)
+    
+    ax1 = fig.add_subplot(gs1[0,0], ylim=[0.0,0.27], xlim=[0.1,2.5])
+
+    exptime=275.
+    rdnoise = 15.
+    xx = np.linspace(0.2,2.4,10)
+    noise_15 = np.sqrt(rdnoise**2+xx*exptime + (xx*exptime*0.002)**2 + (0.17*exptime))/exptime
+    rd_15 = np.sqrt(rdnoise**2)/exptime
+    bg_15 = np.sqrt(xx*exptime)/exptime
+
+    rdnoise = np.sqrt(11)*15.
+    noise_21_11 = np.sqrt(rdnoise**2+xx*exptime + (xx*exptime*0.002)**2 + (0.17*exptime))/exptime
+    rd_21_11 = np.sqrt(rdnoise**2)/exptime
+
+    rdnoise = np.sqrt(2)*21.
+    noise_21_2 = np.sqrt(rdnoise**2+xx*exptime + (xx*exptime*0.002)**2 + (0.17*exptime))/exptime
+    rd_21_2 = np.sqrt(rdnoise**2)/exptime
+
+    rdnoise = np.sqrt(4)*21.
+    noise_21_4 = np.sqrt(rdnoise**2+xx*exptime + (xx*exptime*0.002)**2 + (0.17*exptime))/exptime
+    rd_21_4 = np.sqrt(rdnoise**2)/exptime
+
+
+    ax1.plot(xx, noise_21_11, '-',color='#b10026',lw=1, label=r'RDN = 15$\times\sqrt{11}$ e$^{-}$: (11$\times$25 sec exp (w/ ramp fits))')
+    ax1.plot([0.,3.], [rd_21_11,rd_21_11], ':',color='#b10026',lw=1)
+
+    ax1.plot(xx, noise_21_4, '-',color='#fc4e2a',lw=1, label=r'RDN = 21$\times\sqrt{4}$ e$^{-}$')
+    ax1.plot([0.,3.], [rd_21_4,rd_21_4], ':',color='#fc4e2a',lw=1)
+
+    ax1.plot(xx, noise_21_2, '-',color='#feb24c',lw=1, label=r'RDN = 21$\times\sqrt{2}$ e$^{-}$')
+    ax1.plot([0.,3.], [rd_21_2,rd_21_2], ':',color='#feb24c',lw=1)
+
+    ax1.plot(xx, noise_15, '-',color='black',lw=1, label=r'RDN = 15 e$^{-}$: one 275 sec exp (/w ramp fit)')
+    ax1.plot([0.,3.], [rd_15,rd_15], ':',color='black',lw=1)
+    ax1.plot(xx, bg_15, '--',color='black',lw=1)
+
+    ax1.text(2.0,0.105,'full noise model', rotation=11, va='center', ha='center', fontsize=fs, backgroundcolor='white', alpha=0.7)
+    ax1.text(2.0,0.085,'sky noise', rotation=12, va='center', ha='center', fontsize=fs, backgroundcolor='white', alpha=0.7)
+    ax1.text(2.0,0.053,'read noise',va='center', ha='center', fontsize=fs, backgroundcolor='white', alpha=0.7)
+    #ax1.fill_between([0.6,0.8], 0.,2.,color='0.5', alpha=0.5)
+    ax1.legend(loc='upper left', fontsize=fs, frameon=False)
+    ax1.set_ylabel('$\sigma [e^-/s]$', fontsize=fs)
+    ax1.set_xlabel('Background [e$^-$/s]', fontsize=fs)
+    
+    ax2 = fig.add_subplot(gs1[0,1], ylim=[0.2,1.25], xlim=[0.1,2.5])
+    ax2.plot(xx, 2.5*np.log10(noise_21_11/noise_15), '-',color='#b10026',lw=1)
+    ax2.plot(xx, 2.5*np.log10(noise_21_4/noise_15), '-',color='#fc4e2a',lw=1)
+    ax2.plot(xx, 2.5*np.log10(noise_21_2/noise_15), '-',color='#feb24c',lw=1)
+    ax2.grid(True, linestyle=':',linewidth=0.5)
+    ax2.fill_between([0.6,0.8], 0.,2.,color='0.5', alpha=0.5)
+    ax2.fill_between([2.1,2.3], 0.,2.,color='0.5', alpha=0.5)
+    ax2.text(0.7, 1.1,'nominal\nbackground', rotation=90., va='center', ha='center', fontsize=8)
+    ax2.text(2.2, 0.9,'Oct. 2015\nbackground', rotation=90., va='center', ha='center', fontsize=8)
+    ax2.set_ylabel('2.5*log$_{10}$($\sigma/\sigma_{15}$) [mag]', fontsize=fs)
+    ax2.set_xlabel('Background [e$^-$/s]', fontsize=fs)
+    
+    
+    plt.show(block=False)
+    
+    fig.savefig('sources_of_noise.pdf', dpi=200, transparent=False)
+    fig.savefig('sources_of_noise.png', dpi=200, transparent=False)
+    
+def plot_empty_apertures():
+    
+    import glob
+    import matplotlib.colors as colors
+    import matplotlib.cm as cmx
+    import threedhst.utils
+    from scipy.interpolate import interp1d
+    import scipy
+
+    growth = table.read('COSMOS_growth_curve.dat', format='ascii')
+    fp = interp1d(growth['radius_arcsec'],growth['fraction'])
+
+    fig = unicorn.catalogs.plot_init(xs=10.,aspect=0.45, left=0.2, right=0.05, bottom=0.15, top=0.15, NO_GUI=False)    
+    gs = gridspec.GridSpec(1,2,top=0.9, bottom=0.15)
+    fig.subplots_adjust(wspace=0.2)
+    fig.subplots_adjust(hspace=0.2)
+    fs = 10
+    matplotlib.rc('xtick',labelsize=fs)
+    matplotlib.rc('ytick',labelsize=fs)
+
+    jet = cm = plt.get_cmap('jet')
+    cNorm = colors.Normalize(vmin=0, vmax=8)
+    scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=jet)
+
+    ax1 = fig.add_subplot(gs[0], ylim=[0.1,1.], xlim=[0.1,0.5])
+    ax2 = fig.add_subplot(gs[1], ylim=[10.,15.], xlim=[0.1,2])
+
+    files = glob.glob('icxe*0_asn.fits')
+    for file in files:
+        asn = threedhst.utils.ASNFile('{}'.format(file))
+        for j, exp in enumerate(asn.exposures):
+            data = table.read('{}_drz_sci.apertures.F160W.v4.0.dat'.format(exp), format='ascii')    
+            color = scalarMap.to_rgba(j+1)
+            ax1.plot(data['radius_pix']*0.12825, data['sigma'], 'o-', color=color, alpha=0.8, mfc=color, mec=color)
+            fp1 = interp1d(data['radius_pix']*0.12825, data['sigma'])
+            if (file == 'icxe15010_asn.fits') & ((j == 0) | (j == 7)):
+                coeff, var = scipy.optimize.curve_fit(sigma, data['radius_pix'], data['sigma'], p0=[0.1, 1])
+                ax1.plot(data['radius_pix']*0.12825, 0.175*coeff[0]*data['radius_pix']**2,'--',color='black')
+                ax1.plot(data['radius_pix']*0.12825, 0.175*coeff[0]*data['radius_pix'],'--',color='black')
+
+            growth_y = fp(data['radius_pix']*0.12825)
+            ax2.plot(data['radius_pix']*0.12825, -2.5*np.log10(5*(data['sigma']**2/fp(data['radius_pix']*0.12825))*15369.)+25. ,'o-', color=color, alpha=0.8, mfc=color, mec=color)
+            
+            
+    ax1.set_ylabel('$\sigma$ [e-/s]')
+    ax1.set_xlabel('Radius [arcsec]')
+    
+
+    #ax2.plot(growth['radius_arcsec'],1/growth['fraction'],'-')
+    #ax2.plot(growth['radius_arcsec'], 1/fp(growth['radius_arcsec']),'o')
+            
+    guided = glob.glob('../TEST_HOPR_COOPER/REDUCE/ibt355*_drz_sci.apertures.F160W.v4.0.dat')
+    dash = glob.glob('../TEST_HOPR_COOPER/REDUCE/ibt305*_drz_sci.apertures.F160W.v4.0.dat')
+    #ax1.set_yscale('log')
+    
+    for file in guided:
+        data = table.read(file, format='ascii')
+        #ax1.plot(data['radius_pix']*0.128, data['sigma'], 'o-', color='black', alpha=0.8)
+        
+    for file in dash:
+        data = table.read(file, format='ascii')
+        #ax1.plot(data['radius_pix']*0.128, data['sigma'], 'o-', color='gray', alpha=0.8)
+
+    
+
+    plt.show(block=False)
+    
 def gauss(x, *p):
     
     A, mu, sigma = p
     return A*np.exp(-(x-mu)**2/(2.*sigma**2))
+    
+def sigma(x, *p):
+    
+    alpha, beta = p
+    sigma1 = 0.175
+    return sigma1*alpha*x**beta
             

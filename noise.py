@@ -342,7 +342,8 @@ def plot_flt_bg():
     
     xx = np.linspace(0.2,2.4,10)
     for exptime, rdnoise, mask in zip([252., 277.],[15.25,14.87], [mask4, mask5]):
-        ax.plot(xx, np.sqrt(rdnoise**2+xx*exptime + (xx*exptime*0.002)**2 + (0.15*exptime))/exptime, '-',color='0.5',lw=0.5, alpha=0.5)
+        ax.plot(xx, np.sqrt(rdnoise**2+xx*exptime + (xx*exptime*0.002)**2 + (0.17*exptime))/exptime, '-',color='0.5',lw=0.5, alpha=0.5)
+        #ax.plot(xx, np.sqrt(rdnoise**2+xx*exptime + (xx*exptime*0.002)**2 + (0.05*exptime))/exptime, '-',color='0.5',lw=0.5, alpha=0.5)
         yy = data['bg'][mask]
         tmp = np.sqrt(rdnoise**2+yy*exptime + (yy*exptime*0.002)**2 + (0.15*exptime))/exptime
         print  data['sigma_flt'][mask] - tmp
@@ -356,7 +357,8 @@ def plot_flt_bg():
     
     plt.show(block=False)
 
-    fig.savefig('flt_noise_vs_background.png', dpi=200, transparent=False)
+    fig.savefig('flt_noise_vs_background.png', dpi=200, transparent=False)    
+    
 
 def plot_tests():
     
@@ -538,3 +540,4 @@ def bin_ndarray(ndarray, new_shape, operation='sum'):
         elif operation.lower() in ["mean", "average", "avg"]:
             ndarray = ndarray.mean(-1*(i+1))
     return ndarray
+                

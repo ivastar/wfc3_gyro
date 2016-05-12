@@ -219,7 +219,7 @@ def fix_cosmic_rays(root='icxe15wwq', master_root = 'icxe15010'):
         flt.flush()
             
         
-def align_reads(root='icxe15wwq', threshold=3, final_scale=0.12, refimage='../REF/cosmos-wide_ACS.fits', master_catalog='../REF/IPAC_ACS.fits', align=True):
+def align_reads(root='icxe15wwq', threshold=3, final_scale=0.12, refimage='../REF/cosmos-wide_ACS.fits', master_catalog='../REF/IPAC_ACS.fits', align=True, refxcol = 5, refycol = 6):
     
     from drizzlepac import tweakreg
 
@@ -271,11 +271,12 @@ def align_reads(root='icxe15wwq', threshold=3, final_scale=0.12, refimage='../RE
             threedhst.prep_flt_astrodrizzle.clean_wcsname(flt='{}_flt.fits'.format(exp), wcsname='TWEAK') 
             threedhst.prep_flt_astrodrizzle.clean_wcsname(flt='{}_flt.fits'.format(exp), wcsname='OPUS')    
         
-        tweakreg.TweakReg('{}_asn.fits'.format(root), refimage=refimage, updatehdr=True, updatewcs=True, catfile=catfile, xcol=2, ycol=3, xyunits='pixels', refcat=master_catalog, refxcol = 5, refycol = 6, refxyunits='degrees', shiftfile=True, fitgeometry='shift',outshifts='{}_shifts.txt'.format(root), outwcs='{}_wcs.fits'.format(root), searchrad=5., tolerance=1., minobj = 5, xoffset = 0.0, yoffset = 0.0, wcsname='TWEAK', interactive=False, residplot='No plot', see2dplot=True, clean=True, headerlet=False, clobber=True)
+        tweakreg.TweakReg('{}_asn.fits'.format(root), refimage=refimage, updatehdr=True, updatewcs=True, catfile=catfile, xcol=2, ycol=3, xyunits='pixels', refcat=master_catalog, refxcol = refxcol, refycol = refycol, refxyunits='degrees', shiftfile=True, fitgeometry='shift',outshifts='{}_shifts.txt'.format(root), outwcs='{}_wcs.fits'.format(root), searchrad=5., tolerance=1., minobj = 5, xoffset = 0.0, yoffset = 0.0, wcsname='TWEAK', interactive=False, residplot='No plot', see2dplot=True, clean=True, headerlet=False, clobber=True)
     
     drizzlepac.astrodrizzle.AstroDrizzle('{}_asn.fits'.format(root), output=root, clean=True, final_scale=final_scale, 
         final_pixfrac=0.8, context=False, resetbits=0, final_bits=576, driz_cr = True, driz_sep_bits=576, 
-        preserve=False, wcskey='TWEAK', driz_cr_snr='8.0 5.0', driz_cr_scale = '2.5 0.7')
+        preserve=False, wcskey='TWEAK', driz_cr_snr='8.0 5.0', driz_cr_scale = '2.5 0.7', skyuser = 'MDRIZSKY',, 
+        final_wcs=True)
         
     for exp in asn.exposures:
         flt = fits.open('{}_flt.fits'.format(exp), mode='update')
@@ -298,10 +299,10 @@ def prep_FLTs(root='icxe15010', refimage='../REF/cosmos-wide_ACS.fits', REF_CAT=
     drizzlepac.tweakreg.TweakReg(root+'_asn.fits', refimage=refimage, updatehdr = True, updatewcs = True, 
         writecat = False, clean = True, verbose = True, runfile = 'tweakreg.log', 
         wcsname = 'TWEAK', headerlet = False, shiftfile = True, outshifts = outshifts, outwcs = outwcs, 
-        refcat = REF_CAT, refxcol = 5, refycol = 6, refxyunits = 'degrees', minobj = 5, searchrad = 100.0, 
+        refcat = REF_CAT, refxcol = 5, refycol = 6, refxyunits = 'degrees', minobj = 5, searchrad = 1000.0, 
         searchunits = 'pixels', 
         use2dhist = True, see2dplot = False, separation = 0.5, tolerance = 1.0, xoffset = 0.0, yoffset = 0.0, 
-        fitgeometry = 'shift', residplot = 'No plot', interactive=False, nclip = 3, sigma = 3.0, clobber=True) 
+        fitgeometry = 'shift', residplot = 'No plot', interactive=False, nclip = 3., sigma = 3.0, clobber=True) 
     
     drizzlepac.astrodrizzle.AstroDrizzle(root+'_asn.fits', clean=False, final_pixfrac=1.0, context=False, final_bits=576, resetbits=0, preserve=False, driz_cr_snr='8.0 5.0', driz_cr_scale = '2.5 0.7', wcskey= 'TWEAK')
         
@@ -341,7 +342,6 @@ def run_orbit(master_root='icxe15010', RAW_PATH = '../RAW/'):
     #files = glob.glob(master_root[:6]+'*_*_flt.fits')
     #drizzlepac.astrodrizzle.AstroDrizzle(files, output='test3', clean=True, final_scale=0.1, final_pixfrac=0.8, resetbits=0, context=False, preserve=False, skysub = True, skywidth = 0., skystat = '', skylower = None, skyupper = None, skyclip = 0, skylsigma = 0.0, skyusigma = 0.0, skyuser = 'MDRIZSKY', skyfile = '', wcskey = 'TWEAK', driz_separate = False, driz_sep_wcs = False, median = False, blot = False, driz_cr = False, driz_combine = True, final_wht_type = 'IVM', final_kernel = 'square', final_wt_scl = 'exptime', final_fillval = 0,final_bits = 576, final_units = 'cps', final_wcs = True, driz_sep_bits = 576, final_rot=0, final_ra=1.501375000000E+02, final_dec=2.597027777778E+00,driz_cr_snr='8.0 5.0', driz_cr_scale = '2.5 0.7', final_outnx=9100, final_outny=10200)
     
-    
 def make_cutouts(root='test6_drz',catalog='test6_drz_sci.cat', DIR='cosmos_wide_stamps/'):
     
     import my_python.mk_region_file
@@ -377,4 +377,5 @@ def make_cutouts(root='test6_drz',catalog='test6_drz_sci.cat', DIR='cosmos_wide_
         out_wht.writeto('{}cosmos_wide_{:05d}_wht.fits'.format(DIR, cat['NUMBER'][ii]))
         out_seg = fits.PrimaryHDU(stamp_seg)
         out_seg.writeto('{}cosmos_wide_{:05d}_seg.fits'.format(DIR, cat['NUMBER'][ii]))
-        
+
+    
