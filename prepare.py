@@ -29,7 +29,7 @@ def split_IMA(root='icxe15wwq', PATH='../RAW/'):
     """
     
     FLAT_F160W = fits.open(os.path.join(os.getenv('iref'),'uc721145i_pfl.fits'))[1].data
-    BP_MASK = fits.open('/3DHST/Spectra/Work/14114/REF/new_bp_Oct17.fits')[0].data
+    BP_MASK = fits.open('../REF/new_bp_Oct17.fits')[0].data
     
     ima = fits.open(PATH+root+'_ima.fits.gz')
     flt = fits.open(root+'_flt.fits')
@@ -287,13 +287,15 @@ def align_reads(root='icxe15wwq', threshold=3, final_scale=0.12, refimage='../RE
         se.options['ANALYSIS_THRESH'] = '{}' .format(threshold)
         se.options['DETECT_MINAREA'] = '10'
         #
-        se.sextractImage('{}_flt.fits[0]'.format(exp))
+        se.sextractImage('{}_flt.fits[1]'.format(exp))
         threedhst.sex.sexcatRegions('{}_flt.cat'.format(exp), '{}_flt.reg'.format(exp), format=1)
         
         line = '{0}_flt.fits {0}_flt.cat\n'.format(exp)
         fp.write(line)
         
     fp.close()
+
+    files = glob.glob('{}_*_flt.fits'.format(root))
         
     if align:
         #### Make room for TWEAK wcsname
@@ -301,11 +303,14 @@ def align_reads(root='icxe15wwq', threshold=3, final_scale=0.12, refimage='../RE
             threedhst.prep_flt_astrodrizzle.clean_wcsname(flt='{}_flt.fits'.format(exp), wcsname='TWEAK') 
             threedhst.prep_flt_astrodrizzle.clean_wcsname(flt='{}_flt.fits'.format(exp), wcsname='OPUS')    
         
-        tweakreg.TweakReg('{}_asn.fits'.format(root), refimage=refimage, updatehdr=True, updatewcs=True, catfile=catfile, xcol=2, ycol=3, xyunits='pixels', refcat=master_catalog, refxcol = refxcol, refycol = refycol, refxyunits='degrees', shiftfile=True, fitgeometry='shift',outshifts='{}_shifts.txt'.format(root), outwcs='{}_wcs.fits'.format(root), searchrad=5., tolerance=1., minobj = 5, xoffset = 0.0, yoffset = 0.0, wcsname='TWEAK', interactive=False, residplot='No plot', see2dplot=True, clean=True, headerlet=False, clobber=True)
+        tweakreg.TweakReg(files, refimage=refimage, updatehdr=True, updatewcs=True, catfile=catfile, xcol=2, ycol=3, xyunits='pixels', refcat=master_catalog, refxcol = refxcol, refycol = refycol, refxyunits='degrees', shiftfile=True, fitgeometry='shift',outshifts='{}_shifts.txt'.format(root), outwcs='{}_wcs.fits'.format(root), searchrad=5., tolerance=1., minobj = 5, xoffset = 0.0, yoffset = 0.0, wcsname='TWEAK', interactive=False, residplot='No plot', see2dplot=True, clean=True, headerlet=False, clobber=True)
     
-    drizzlepac.astrodrizzle.AstroDrizzle('{}_asn.fits'.format(root), output=root, clean=True, final_scale=final_scale, 
+    # AstroDrizzle doesn't like the asn file here: '{}_asn.fits'.format(root)
+    # Temporaroly substituting with a list of files
+    #files = glob.glob('{}_*_flt.fits'.format(root))
+    drizzlepac.astrodrizzle.AstroDrizzle(files, output=root, clean=True, final_scale=final_scale, 
         final_pixfrac=0.8, context=False, resetbits=0, final_bits=576, driz_cr = True, driz_sep_bits=576, 
-        preserve=False, wcskey='TWEAK', driz_cr_snr='8.0 5.0', driz_cr_scale = '2.5 0.7', skyuser = 'MDRIZSKY',, 
+        preserve=False, wcskey='TWEAK', driz_cr_snr='8.0 5.0', driz_cr_scale = '2.5 0.7', skyuser = 'MDRIZSKY', 
         final_wcs=True)
         
     for exp in asn.exposures:
@@ -332,7 +337,7 @@ def prep_FLTs(root='icxe15010', refimage='../REF/cosmos-wide_ACS.fits', REF_CAT=
         refcat = REF_CAT, refxcol = 5, refycol = 6, refxyunits = 'degrees', minobj = 5, searchrad = 1000.0, 
         searchunits = 'pixels', 
         use2dhist = True, see2dplot = False, separation = 0.5, tolerance = 1.0, xoffset = 0.0, yoffset = 0.0, 
-        fitgeometry = 'shift', residplot = 'No plot', interactive=False, nclip = 3., sigma = 3.0, clobber=True) 
+        fitgeometry = 'shift', interactive=False, nclip = 3, sigma = 3.0, clobber=True) 
     
     drizzlepac.astrodrizzle.AstroDrizzle(root+'_asn.fits', clean=False, final_pixfrac=1.0, context=False, final_bits=576, resetbits=0, preserve=False, driz_cr_snr='8.0 5.0', driz_cr_scale = '2.5 0.7', wcskey= 'TWEAK')
         
